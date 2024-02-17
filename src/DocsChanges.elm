@@ -175,60 +175,98 @@ listAllJustMap mapToMaybe =
 diffType : ( Elm.Type.Type, Elm.Type.Type ) -> Maybe (List ( String, String ))
 diffType =
     \( oldType, newType ) ->
-        case ( oldType, newType ) of
-            ( Elm.Type.Var oldName, Elm.Type.Var newName ) ->
-                Just [ ( oldName, newName ) ]
+        case oldType of
+            Elm.Type.Var oldName ->
+                case newType of
+                    Elm.Type.Var newName ->
+                        Just [ ( oldName, newName ) ]
 
-            ( Elm.Type.Lambda oldInput oldOutput, Elm.Type.Lambda newInput newOutput ) ->
-                Maybe.map2 (\inDiff outDiff -> inDiff ++ outDiff)
-                    (diffType ( oldInput, newInput ))
-                    (diffType ( oldOutput, newOutput ))
-
-            ( Elm.Type.Type oldName oldArgs, Elm.Type.Type newName newArgs ) ->
-                if (oldName /= newName) || List.length oldArgs /= List.length newArgs then
-                    Nothing
-
-                else
-                    List.map2 (\oldArg newArg -> ( oldArg, newArg ) |> diffType) oldArgs newArgs
-                        |> listAllJustMap identity
-                        |> Maybe.map List.concat
-
-            ( Elm.Type.Record fields maybeExt, Elm.Type.Record bFields bMaybeExt ) ->
-                case ( maybeExt, bMaybeExt ) of
-                    ( Nothing, Just _ ) ->
+                    _ ->
                         Nothing
 
-                    ( Just _, Nothing ) ->
+            Elm.Type.Lambda oldInput oldOutput ->
+                case newType of
+                    Elm.Type.Lambda newInput newOutput ->
+                        Maybe.map2 (\inDiff outDiff -> inDiff ++ outDiff)
+                            (diffType ( oldInput, newInput ))
+                            (diffType ( oldOutput, newOutput ))
+
+                    _ ->
                         Nothing
 
-                    ( Nothing, Nothing ) ->
-                        diffFields fields bFields
+            Elm.Type.Type oldName oldArgs ->
+                case newType of
+                    Elm.Type.Type newName newArgs ->
+                        if (oldName /= newName) || List.length oldArgs /= List.length newArgs then
+                            Nothing
 
-                    ( Just oldExt, Just newExt ) ->
-                        Maybe.map (\fieldDiffs -> ( oldExt, newExt ) :: fieldDiffs)
-                            (diffFields fields bFields)
+                        else
+                            List.map2 (\oldArg newArg -> ( oldArg, newArg ) |> diffType) oldArgs newArgs
+                                |> listAllJustMap identity
+                                |> Maybe.map List.concat
 
-            ( Elm.Type.Tuple [], Elm.Type.Tuple [] ) ->
-                Just []
+                    _ ->
+                        Nothing
 
-            ( Elm.Type.Tuple [ _, _ ], Elm.Type.Tuple [ _, _, _ ] ) ->
-                Nothing
+            Elm.Type.Record fields maybeExt ->
+                case newType of
+                    Elm.Type.Record bFields bMaybeExt ->
+                        case ( maybeExt, bMaybeExt ) of
+                            ( Nothing, Just _ ) ->
+                                Nothing
 
-            ( Elm.Type.Tuple [ _, _, _ ], Elm.Type.Tuple [ _, _ ] ) ->
-                Nothing
+                            ( Just _, Nothing ) ->
+                                Nothing
 
-            ( Elm.Type.Tuple [ oldFirst, oldSecond, oldThird ], Elm.Type.Tuple [ newFirst, newSecond, newThird ] ) ->
-                Maybe.map3 (\a b c -> a ++ b ++ c)
-                    (diffType ( oldFirst, newFirst ))
-                    (diffType ( oldSecond, newSecond ))
-                    (diffType ( oldThird, newThird ))
+                            ( Nothing, Nothing ) ->
+                                diffFields fields bFields
 
-            ( Elm.Type.Tuple [ oldFirst, oldSecond ], Elm.Type.Tuple [ newFirst, newSecond ] ) ->
-                Maybe.map2 (\a b -> a ++ b)
-                    (diffType ( oldFirst, newFirst ))
-                    (diffType ( oldSecond, newSecond ))
+                            ( Just oldExt, Just newExt ) ->
+                                Maybe.map (\fieldDiffs -> ( oldExt, newExt ) :: fieldDiffs)
+                                    (diffFields fields bFields)
 
-            ( _, _ ) ->
+                    _ ->
+                        Nothing
+
+            Elm.Type.Tuple [] ->
+                case newType of
+                    Elm.Type.Tuple [] ->
+                        Just []
+
+                    _ ->
+                        Nothing
+
+            Elm.Type.Tuple [ oldInParens ] ->
+                case newType of
+                    Elm.Type.Tuple [ newInParens ] ->
+                        diffType ( oldInParens, newInParens )
+
+                    _ ->
+                        Nothing
+
+            Elm.Type.Tuple [ oldFirst, oldSecond ] ->
+                case newType of
+                    Elm.Type.Tuple [ newFirst, newSecond ] ->
+                        Maybe.map2 (\a b -> a ++ b)
+                            (diffType ( oldFirst, newFirst ))
+                            (diffType ( oldSecond, newSecond ))
+
+                    _ ->
+                        Nothing
+
+            Elm.Type.Tuple [ oldFirst, oldSecond, oldThird ] ->
+                case newType of
+                    Elm.Type.Tuple [ newFirst, newSecond, newThird ] ->
+                        Maybe.map3 (\a b c -> [ a, b, c ] |> List.concat)
+                            (diffType ( oldFirst, newFirst ))
+                            (diffType ( oldSecond, newSecond ))
+                            (diffType ( oldThird, newThird ))
+
+                    _ ->
+                        Nothing
+
+            Elm.Type.Tuple (_ :: _ :: _ :: _ :: _) ->
+                -- impossible
                 Nothing
 
 
