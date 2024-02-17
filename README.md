@@ -22,5 +22,4 @@ serve
   - [vercel/serve](https://github.com/vercel/serve)
 
 ## TODO
-  - syntax formatting
   - a way to generate a textual form like `elm diff` that can for example be used to fill in missing change log items

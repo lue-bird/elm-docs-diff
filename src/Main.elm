@@ -1,6 +1,7 @@
 module Main exposing (main)
 
 import Browser
+import Color
 import Dict
 import DocsChanges
 import Element exposing (Element)
@@ -15,9 +16,10 @@ import Elm.Syntax.Type
 import Elm.Syntax.TypeAlias
 import Elm.Syntax.TypeAnnotation
 import Elm.Type
+import ElmSyntaxHighlight
 import File exposing (File)
 import File.Select
-import Html
+import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Http
@@ -51,19 +53,6 @@ type Event
 type EarlierOrLater
     = Earlier
     | Later
-
-
-earlierOrLaterFieldAlter :
-    EarlierOrLater
-    -> (field -> field)
-    -> ({ r | earlier : field, later : field } -> { r | earlier : field, later : field })
-earlierOrLaterFieldAlter earlierOrLater alter =
-    case earlierOrLater of
-        Earlier ->
-            \r -> { r | earlier = r.earlier |> alter }
-
-        Later ->
-            \r -> { r | later = r.later |> alter }
 
 
 type DocsJsonSourceEvent
@@ -217,8 +206,17 @@ reactTo event =
                         )
 
 
-type VersionedFullPackageName
-    = VersionedFullPackageName { author : String, name : String, version : SemanticVersion }
+earlierOrLaterFieldAlter :
+    EarlierOrLater
+    -> (field -> field)
+    -> ({ r | earlier : field, later : field } -> { r | earlier : field, later : field })
+earlierOrLaterFieldAlter earlierOrLater alter =
+    case earlierOrLater of
+        Earlier ->
+            \r -> { r | earlier = r.earlier |> alter }
+
+        Later ->
+            \r -> { r | later = r.later |> alter }
 
 
 fetchPackageDocs : VersionedFullPackageName -> Cmd (Result Http.Error (List Elm.Docs.Module))
@@ -239,16 +237,48 @@ fetchPackageDocs =
             }
 
 
-type SemanticVersion
-    = SemanticVersion { major : Int, minor : Int, patch : Int }
-
-
 versionToString : SemanticVersion -> String
 versionToString =
     \(SemanticVersion version) ->
         [ version.major, version.minor, version.patch ]
             |> List.map String.fromInt
             |> String.join "."
+
+
+magnitudeUi : DocsChanges.Magnitude -> Element event_
+magnitudeUi =
+    \magnitude ->
+        magnitude
+            |> DocsChanges.magnitudeToString
+            |> Element.text
+            |> Element.el
+                [ Element.Font.italic
+                , Element.Font.color (magnitude |> magnitudeToColor)
+                ]
+
+
+addedColor : Element.Color
+addedColor =
+    Element.rgb 0 1 0
+
+
+removedColor : Element.Color
+removedColor =
+    Element.rgb 1 0 0
+
+
+magnitudeToColor : DocsChanges.Magnitude -> Element.Color
+magnitudeToColor =
+    \magnitude ->
+        case magnitude of
+            DocsChanges.Patch ->
+                Element.rgb 0 0 1
+
+            DocsChanges.Minor ->
+                addedColor
+
+            DocsChanges.Major ->
+                removedColor
 
 
 ui : State -> Browser.Document Event
@@ -343,6 +373,66 @@ ui =
         }
 
 
+elmCodeBlockUi : ElmSyntaxHighlight.SyntaxHighlightable -> Element event_
+elmCodeBlockUi elmCode =
+    Html.code
+        [ Html.Attributes.style "font-size" "0.8em"
+        , Html.Attributes.style "line-height" "1.5"
+        ]
+        [ elmCode |> elmCodeUi ]
+        |> Element.html
+
+
+elmCodeUi : ElmSyntaxHighlight.SyntaxHighlightable -> Html event_
+elmCodeUi =
+    \syntaxHighlightable ->
+        Html.code []
+            (syntaxHighlightable
+                |> List.map
+                    (\segment ->
+                        Html.code
+                            (case segment.syntaxKind of
+                                Nothing ->
+                                    []
+
+                                Just syntaxKind ->
+                                    [ Html.Attributes.style "color"
+                                        (syntaxKind |> syntaxKindToColor |> Color.toCssString)
+                                    ]
+                            )
+                            [ Html.text segment.string
+                            ]
+                    )
+            )
+
+
+syntaxKindToColor : ElmSyntaxHighlight.SyntaxKind -> Color.Color
+syntaxKindToColor =
+    -- light purple Color.rgb 0.97 0.42 1
+    \syntaxKind ->
+        case syntaxKind of
+            ElmSyntaxHighlight.Type ->
+                Color.rgb 0.9 0.55 1
+
+            ElmSyntaxHighlight.Variant ->
+                Color.rgb 0.24 0.75 0.62
+
+            ElmSyntaxHighlight.Field ->
+                Color.rgb 0.4 0.9 0
+
+            ElmSyntaxHighlight.ModuleNameOrAlias ->
+                Color.rgb 0.45 0.5 1
+
+            ElmSyntaxHighlight.Variable ->
+                Color.rgb 0.85 0.8 0.1
+
+            ElmSyntaxHighlight.Flow ->
+                Color.rgb 1 0.45 0.35
+
+            ElmSyntaxHighlight.DeclarationRelated ->
+                Color.rgb 0.55 0.75 1
+
+
 {-| Mostly an elm port of <https://github.com/elm/compiler/blob/2f6dd29258e880dbb7effd57a829a0470d8da48b/terminal/src/Diff.hs#L21>
 -}
 packageChangesUi : DocsChanges.PackageChanges -> Element event_
@@ -361,11 +451,9 @@ packageChangesUi =
                         , details =
                             changes.modulesRemoved
                                 |> List.map
-                                    (\moduleDetails ->
-                                        [ moduleDetails |> Html.text
-                                        ]
-                                            |> Html.code []
-                                            |> Element.html
+                                    (\moduleName ->
+                                        [ { string = moduleName, syntaxKind = ElmSyntaxHighlight.ModuleNameOrAlias |> Just } ]
+                                            |> elmCodeBlockUi
                                     )
                                 |> Element.column [ Element.spacing 0 ]
                         }
@@ -383,18 +471,16 @@ packageChangesUi =
                         , details =
                             changes.modulesAdded
                                 |> List.map
-                                    (\moduleDetails ->
-                                        [ moduleDetails |> Html.text
-                                        ]
-                                            |> Html.code []
-                                            |> Element.html
+                                    (\moduleName ->
+                                        [ { string = moduleName, syntaxKind = ElmSyntaxHighlight.ModuleNameOrAlias |> Just } ]
+                                            |> elmCodeBlockUi
                                     )
                                 |> Element.column [ Element.spacing 0 ]
                         }
                     ]
         in
-        [ addedChunk
-        , removedChunk
+        [ removedChunk
+        , addedChunk
         , changes.modulesChanged |> Dict.toList |> List.map moduleChangesToChunk
         ]
             |> List.concat
@@ -403,14 +489,6 @@ packageChangesUi =
                 [ Element.spacing 40
                 , Element.height Element.fill
                 ]
-
-
-type Chunk
-    = Chunk
-        { title : String
-        , magnitude : DocsChanges.Magnitude
-        , details : Element Never
-        }
 
 
 chunkToDoc : Chunk -> Element event_
@@ -426,47 +504,6 @@ chunkToDoc (Chunk chunk) =
         |> Element.column []
 
 
-addedColor : Element.Color
-addedColor =
-    Element.rgb 0 1 0
-
-
-removedColor : Element.Color
-removedColor =
-    Element.rgb 1 0 0
-
-
-changedColor : Element.Color
-changedColor =
-    Element.rgb 1 1 0
-
-
-magnitudeUi : DocsChanges.Magnitude -> Element event_
-magnitudeUi =
-    \magnitude ->
-        magnitude
-            |> DocsChanges.magnitudeToString
-            |> Element.text
-            |> Element.el
-                [ Element.Font.italic
-                , Element.Font.color (magnitude |> magnitudeToColor)
-                ]
-
-
-magnitudeToColor : DocsChanges.Magnitude -> Element.Color
-magnitudeToColor =
-    \magnitude ->
-        case magnitude of
-            DocsChanges.Patch ->
-                Element.rgb 0 0 1
-
-            DocsChanges.Minor ->
-                addedColor
-
-            DocsChanges.Major ->
-                removedColor
-
-
 moduleChangesToChunk : ( String, DocsChanges.ModuleChanges ) -> Chunk
 moduleChangesToChunk ( moduleName, DocsChanges.ModuleChanges moduleChanges ) =
     let
@@ -474,35 +511,35 @@ moduleChangesToChunk ( moduleName, DocsChanges.ModuleChanges moduleChanges ) =
         magnitude =
             DocsChanges.ModuleChanges moduleChanges |> DocsChanges.moduleChangeToMagnitude
 
-        changesToDocTriple : (k -> v -> String) -> DocsChanges.Changes k v -> ( List (Element Never), List (Element Never), List (Element Never) )
+        changesToDocTriple : (k -> v -> Element Never) -> DocsChanges.Changes k v -> ( List (Element Never), List (Element Never), List (Element Never) )
         changesToDocTriple entryToDoc (DocsChanges.Changes changes) =
             let
                 diffed : ( k, ( v, v ) ) -> Element Never
                 diffed ( name, ( oldValue, newValue ) ) =
-                    [ [ "-"
+                    [ [ "–"
                             |> Element.text
                             |> Element.el
                                 [ Element.alignTop
-                                , Element.width (Element.px 20)
+                                , Element.width (Element.px 35)
                                 , Element.Font.color removedColor
+                                , Element.alignLeft
                                 , Element.Font.extraBold
-                                , Element.Font.size 23
+                                , Element.Font.size 27
                                 , Element.Font.family [ Element.Font.monospace ]
                                 ]
-                      , [ entryToDoc name oldValue |> Html.text ] |> Html.code [] |> Element.html
+                      , entryToDoc name oldValue
                       ]
                         |> Element.row [ Element.spacing 10 ]
                     , [ "+"
                             |> Element.text
                             |> Element.el
                                 [ Element.alignTop
-                                , Element.width (Element.px 20)
+                                , Element.width (Element.px 35)
                                 , Element.Font.color addedColor
-                                , Element.Font.extraBold
                                 , Element.Font.size 23
                                 , Element.Font.family [ Element.Font.monospace ]
                                 ]
-                      , [ entryToDoc name newValue |> Html.text ] |> Html.code [] |> Element.html
+                      , entryToDoc name newValue
                       ]
                         |> Element.row [ Element.spacing 10 ]
                     ]
@@ -510,11 +547,9 @@ moduleChangesToChunk ( moduleName, DocsChanges.ModuleChanges moduleChanges ) =
             in
             ( Dict.toList changes.added
                 |> List.map (\( name, value ) -> entryToDoc name value)
-                |> List.map (\code -> [ code |> Html.text ] |> Html.code [] |> Element.html)
             , List.map diffed (Dict.toList changes.changed)
             , Dict.toList changes.removed
                 |> List.map (\( name, value ) -> entryToDoc name value)
-                |> List.map (\code -> [ code |> Html.text ] |> Html.code [] |> Element.html)
             )
 
         ( unionAdd, unionChange, unionRemove ) =
@@ -557,7 +592,9 @@ moduleChangesToChunk ( moduleName, DocsChanges.ModuleChanges moduleChanges ) =
                                             Element.none
 
                                         alias0 :: alias1Up ->
-                                            (alias0 :: alias1Up) |> Element.column [ Element.spacing 20 ]
+                                            (alias0 :: alias1Up)
+                                                |> List.map (\el -> el |> Element.el [ Element.paddingEach { left = 0, right = 0, top = 10, bottom = 10 } ])
+                                                |> Element.column [ Element.spacing 20 ]
                                    , case valuesPossiblyFilled of
                                         [] ->
                                             Element.none
@@ -573,28 +610,48 @@ moduleChangesToChunk ( moduleName, DocsChanges.ModuleChanges moduleChanges ) =
                                     |> Element.column [ Element.spacing 0 ]
                                 )
             in
-            [ changesToDoc ( "added", addedColor ) unionAdd aliasAdd valueAdd
-            , changesToDoc ( "removed", removedColor ) unionRemove aliasRemove valueRemove
+            [ changesToDoc ( "removed", removedColor ) unionRemove aliasRemove valueRemove
             , changesToDoc ( "changed", changedColor ) unionChange aliasChange valueChange
+            , changesToDoc ( "added", addedColor ) unionAdd aliasAdd valueAdd
             ]
                 |> List.filterMap identity
                 |> Element.column [ Element.spacing 10 ]
         }
 
 
-unionToDoc : String -> Elm.Docs.Union -> String
+changedColor : Element.Color
+changedColor =
+    Element.rgb 1 1 0
+
+
+unionToDoc : String -> Elm.Docs.Union -> Element event_
 unionToDoc _ union =
     case union.tags of
         [] ->
-            Pretty.string "type"
-                |> Pretty.a Pretty.space
-                |> Pretty.a (Pretty.string union.name)
-                |> Pretty.a Pretty.space
-                |> Pretty.a (union.args |> List.map Pretty.string |> Pretty.join Pretty.space)
-                |> Pretty.pretty 1000
+            [ { string = "type", syntaxKind = ElmSyntaxHighlight.DeclarationRelated |> Just }
+            , { string = " ", syntaxKind = Nothing }
+            , { string = union.name, syntaxKind = ElmSyntaxHighlight.Type |> Just }
+            , { string = " ", syntaxKind = Nothing }
+            ]
+                ++ (union.args
+                        |> List.map (\attachment -> { string = attachment, syntaxKind = ElmSyntaxHighlight.Variable |> Just })
+                        |> List.intersperse { string = " ", syntaxKind = Nothing }
+                   )
+                |> elmCodeBlockUi
 
         _ :: _ ->
-            union |> docsUnionToSyntax |> Elm.Pretty.prettyCustomType |> Pretty.pretty 60
+            union
+                |> docsUnionToSyntax
+                |> Elm.Pretty.prettyCustomType
+                |> Pretty.pretty 60
+                |> ElmSyntaxHighlight.for
+                |> elmCodeBlockUi
+
+
+docsTypeToSyntaxNode : Elm.Type.Type -> Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation
+docsTypeToSyntaxNode =
+    \innerDocsType ->
+        innerDocsType |> docsTypeToSyntax |> Elm.Syntax.Node.empty
 
 
 docsUnionToSyntax : Elm.Docs.Union -> Elm.Syntax.Type.Type
@@ -615,9 +672,14 @@ docsUnionToSyntax =
         }
 
 
-aliasToDoc : String -> Elm.Docs.Alias -> String
+aliasToDoc : String -> Elm.Docs.Alias -> Element event_
 aliasToDoc _ docsAlias =
-    docsAlias |> docsAliasToSyntax |> Elm.Pretty.prettyTypeAlias |> Pretty.pretty 110
+    docsAlias
+        |> docsAliasToSyntax
+        |> Elm.Pretty.prettyTypeAlias
+        |> Pretty.pretty 110
+        |> ElmSyntaxHighlight.for
+        |> elmCodeBlockUi
 
 
 docsAliasToSyntax : Elm.Docs.Alias -> Elm.Syntax.TypeAlias.TypeAlias
@@ -630,63 +692,15 @@ docsAliasToSyntax =
         }
 
 
-valueToDoc : String -> Elm.Docs.Value -> String
+valueToDoc : String -> Elm.Docs.Value -> Element event_
 valueToDoc _ docsValue =
     { name = docsValue.name |> Elm.Syntax.Node.empty
     , typeAnnotation = docsValue.tipe |> docsTypeToSyntaxNode
     }
         |> Elm.Pretty.prettySignature
         |> Pretty.pretty 60
-
-
-docsTypeToSyntaxNode : Elm.Type.Type -> Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation
-docsTypeToSyntaxNode =
-    \innerDocsType ->
-        innerDocsType |> docsTypeToSyntax |> Elm.Syntax.Node.empty
-
-
-docsTypeToSyntax : Elm.Type.Type -> Elm.Syntax.TypeAnnotation.TypeAnnotation
-docsTypeToSyntax =
-    \tipe ->
-        case tipe of
-            Elm.Type.Var name ->
-                Elm.Syntax.TypeAnnotation.GenericType name
-
-            Elm.Type.Lambda input output ->
-                Elm.Syntax.TypeAnnotation.FunctionTypeAnnotation (input |> docsTypeToSyntaxNode) (output |> docsTypeToSyntaxNode)
-
-            Elm.Type.Tuple [] ->
-                Elm.Syntax.TypeAnnotation.Unit
-
-            Elm.Type.Tuple parts ->
-                Elm.Syntax.TypeAnnotation.Tupled (parts |> List.map docsTypeToSyntaxNode)
-
-            Elm.Type.Type unqualifiedName arguments ->
-                Elm.Syntax.TypeAnnotation.Typed
-                    (( [], unqualifiedName ) |> Elm.Syntax.Node.empty)
-                    (arguments |> List.map docsTypeToSyntaxNode)
-
-            Elm.Type.Record fields (Just extendedRecordVariableName) ->
-                Elm.Syntax.TypeAnnotation.GenericRecord
-                    (extendedRecordVariableName |> Elm.Syntax.Node.empty)
-                    (fields
-                        |> List.map
-                            (\( fieldName, fieldValue ) ->
-                                ( fieldName |> Elm.Syntax.Node.empty, fieldValue |> docsTypeToSyntaxNode )
-                                    |> Elm.Syntax.Node.empty
-                            )
-                        |> Elm.Syntax.Node.empty
-                    )
-
-            Elm.Type.Record fields Nothing ->
-                Elm.Syntax.TypeAnnotation.Record
-                    (fields
-                        |> List.map
-                            (\( fieldName, fieldValue ) ->
-                                ( fieldName |> Elm.Syntax.Node.empty, fieldValue |> docsTypeToSyntaxNode )
-                                    |> Elm.Syntax.Node.empty
-                            )
-                    )
+        |> ElmSyntaxHighlight.for
+        |> elmCodeBlockUi
 
 
 header : String -> Element event_
@@ -696,47 +710,20 @@ header text =
         |> Element.el [ Element.Font.bold, Element.Font.size 24 ]
 
 
-spanningLabel : String -> Element event_
-spanningLabel =
-    \text ->
-        Element.column
-            [ Element.width Element.fill, Element.spacing 4 ]
-            [ text |> Element.text
-            , Element.none
-            ]
-
-
-textInputUi : { state : String, label : String } -> Element String
-textInputUi config =
-    Element.Input.text
-        [ Element.Border.color (Element.rgba 0 0 0 0)
-        , Element.paddingXY 0 4
-        , Element.Font.size 20
-        , Element.Font.family [ Element.Font.monospace ]
-        , Element.Font.color interactiveColor
-        , Element.Border.rounded 0
-        , Element.Background.color (Element.rgb 0 0 0)
-        ]
-        { onChange = identity
-        , text = config.state
-        , placeholder = Nothing
-        , label =
-            Element.Input.labelAbove
-                []
-                (config.label
-                    |> Element.text
-                    |> Element.el
-                        [ Element.Font.size 14
-                        , Element.Font.family [ Element.Font.sansSerif ]
-                        ]
-                )
-        }
-        |> Element.el [ Element.paddingEach { top = 0, left = 0, right = 10, bottom = 0 } ]
-
-
 interactiveColor : Element.Color
 interactiveColor =
     Element.rgb 0.3 0.56 0.9
+
+
+actionUi : String -> Element ()
+actionUi label =
+    Element.Input.button
+        [ Element.Font.color interactiveColor
+        , Element.Background.color (Element.rgb 0 0 0)
+        ]
+        { label = label |> Element.text
+        , onPress = () |> Just
+        }
 
 
 docsJsonSourceUi : DocsJsonSourceState -> Element DocsJsonSourceEvent
@@ -799,6 +786,44 @@ docsJsonSourceUi =
                 "✔️ docs.json added" |> Element.text
 
 
+spanningLabel : String -> Element event_
+spanningLabel =
+    \text ->
+        Element.column
+            [ Element.width Element.fill, Element.spacing 4 ]
+            [ text |> Element.text
+            , Element.none
+            ]
+
+
+textInputUi : { state : String, label : String } -> Element String
+textInputUi config =
+    Element.Input.text
+        [ Element.Border.color (Element.rgba 0 0 0 0)
+        , Element.paddingXY 0 4
+        , Element.Font.size 20
+        , Element.Font.family [ Element.Font.monospace ]
+        , Element.Font.color interactiveColor
+        , Element.Border.rounded 0
+        , Element.Background.color (Element.rgb 0 0 0)
+        ]
+        { onChange = identity
+        , text = config.state
+        , placeholder = Nothing
+        , label =
+            Element.Input.labelAbove
+                []
+                (config.label
+                    |> Element.text
+                    |> Element.el
+                        [ Element.Font.size 14
+                        , Element.Font.family [ Element.Font.sansSerif ]
+                        ]
+                )
+        }
+        |> Element.el [ Element.paddingEach { top = 0, left = 0, right = 10, bottom = 0 } ]
+
+
 semanticVersionFromStrings : { major : String, minor : String, patch : String } -> Result String SemanticVersion
 semanticVersionFromStrings =
     \raw ->
@@ -809,22 +834,6 @@ semanticVersionFromStrings =
 
             _ ->
                 "version parts need to be natural numbers >= 0" |> Err
-
-
-type FilesSelectEvent
-    = FilesDropped File
-    | FilesSelectClicked
-
-
-actionUi : String -> Element ()
-actionUi label =
-    Element.Input.button
-        [ Element.Font.color interactiveColor
-        , Element.Background.color (Element.rgb 0 0 0)
-        ]
-        { label = label |> Element.text
-        , onPress = () |> Just
-        }
 
 
 filesSelectUi : Element FilesSelectEvent
@@ -846,3 +855,68 @@ dropFilesJsonDecoder =
         (Json.Decode.oneOrMore (\head _ -> head)
             File.decoder
         )
+
+
+type VersionedFullPackageName
+    = VersionedFullPackageName { author : String, name : String, version : SemanticVersion }
+
+
+type SemanticVersion
+    = SemanticVersion { major : Int, minor : Int, patch : Int }
+
+
+type Chunk
+    = Chunk
+        { title : String
+        , magnitude : DocsChanges.Magnitude
+        , details : Element Never
+        }
+
+
+docsTypeToSyntax : Elm.Type.Type -> Elm.Syntax.TypeAnnotation.TypeAnnotation
+docsTypeToSyntax =
+    \tipe ->
+        case tipe of
+            Elm.Type.Var name ->
+                Elm.Syntax.TypeAnnotation.GenericType name
+
+            Elm.Type.Lambda input output ->
+                Elm.Syntax.TypeAnnotation.FunctionTypeAnnotation (input |> docsTypeToSyntaxNode) (output |> docsTypeToSyntaxNode)
+
+            Elm.Type.Tuple [] ->
+                Elm.Syntax.TypeAnnotation.Unit
+
+            Elm.Type.Tuple parts ->
+                Elm.Syntax.TypeAnnotation.Tupled (parts |> List.map docsTypeToSyntaxNode)
+
+            Elm.Type.Type unqualifiedName arguments ->
+                Elm.Syntax.TypeAnnotation.Typed
+                    (( [], unqualifiedName ) |> Elm.Syntax.Node.empty)
+                    (arguments |> List.map docsTypeToSyntaxNode)
+
+            Elm.Type.Record fields (Just extendedRecordVariableName) ->
+                Elm.Syntax.TypeAnnotation.GenericRecord
+                    (extendedRecordVariableName |> Elm.Syntax.Node.empty)
+                    (fields
+                        |> List.map
+                            (\( fieldName, fieldValue ) ->
+                                ( fieldName |> Elm.Syntax.Node.empty, fieldValue |> docsTypeToSyntaxNode )
+                                    |> Elm.Syntax.Node.empty
+                            )
+                        |> Elm.Syntax.Node.empty
+                    )
+
+            Elm.Type.Record fields Nothing ->
+                Elm.Syntax.TypeAnnotation.Record
+                    (fields
+                        |> List.map
+                            (\( fieldName, fieldValue ) ->
+                                ( fieldName |> Elm.Syntax.Node.empty, fieldValue |> docsTypeToSyntaxNode )
+                                    |> Elm.Syntax.Node.empty
+                            )
+                    )
+
+
+type FilesSelectEvent
+    = FilesDropped File
+    | FilesSelectClicked

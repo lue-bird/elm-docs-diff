@@ -299,41 +299,78 @@ isEquivalentRenaming varPairs =
 compatibleVars : ( String, String ) -> Bool
 compatibleVars ( old, new ) =
     case ( categorizeVar old, categorizeVar new ) of
-        ( CompAppend, CompAppend ) ->
+        ( Constrained CompAppend, Constrained CompAppend ) ->
             True
 
-        ( Comparable, Comparable ) ->
+        ( Constrained Comparable, Constrained Comparable ) ->
             True
 
-        ( Appendable, Appendable ) ->
+        ( Constrained Appendable, Constrained Appendable ) ->
             True
 
-        ( Number, Number ) ->
+        ( Constrained Number, Constrained Number ) ->
             True
 
-        ( Number, Comparable ) ->
+        ( Constrained Number, Constrained Comparable ) ->
             True
 
         ( _, Var ) ->
             True
 
-        ( _, _ ) ->
+        ( Constrained Comparable, Constrained CompAppend ) ->
+            -- likely an oversight by elm, should be True
+            False
+
+        ( Constrained Comparable, Constrained Number ) ->
+            -- likely an oversight by elm, should be True
+            False
+
+        ( Constrained Appendable, Constrained CompAppend ) ->
+            -- likely an oversight by elm, should be True
+            False
+
+        ( Constrained Number, Constrained CompAppend ) ->
+            -- likely an oversight by elm, should be True
+            False
+
+        ( Constrained CompAppend, Constrained Comparable ) ->
+            False
+
+        ( Constrained CompAppend, Constrained Appendable ) ->
+            False
+
+        ( Constrained CompAppend, Constrained Number ) ->
+            False
+
+        ( Constrained Comparable, Constrained Appendable ) ->
+            False
+
+        ( Constrained Appendable, Constrained Comparable ) ->
+            False
+
+        ( Constrained Appendable, Constrained Number ) ->
+            False
+
+        ( Constrained Number, Constrained Appendable ) ->
+            False
+
+        ( Var, Constrained _ ) ->
             False
 
 
 categorizeVar : String -> TypeVarCategory
 categorizeVar name =
     if String.startsWith "compappend" name then
-        CompAppend
+        CompAppend |> Constrained
 
     else if String.startsWith "comparable" name then
-        Comparable
+        Comparable |> Constrained
 
     else if String.startsWith "appendable" name then
-        Appendable
+        Appendable |> Constrained
 
     else if String.startsWith "number" name then
-        Number
+        Number |> Constrained
 
     else
         Var
@@ -416,11 +453,15 @@ diffFields oldRawFields newRawFields =
 
 
 type TypeVarCategory
+    = Constrained Constraint
+    | Var
+
+
+type Constraint
     = CompAppend
     | Comparable
     | Appendable
     | Number
-    | Var
 
 
 type Magnitude
