@@ -2,7 +2,7 @@
 
 Compare versions of an API using their `docs.json` metadata which can be fetched online or selected from a file.
 
-→ [website](https://lue-bird.github.io/elm-docs-json-diff/)
+→ [website](https://lue-bird.github.io/elm-project-metadata-diff/)
 
 The idea is for this to be a more general `elm diff` to show changes between for example
   - versions of a package that doesn't have a complete change log
