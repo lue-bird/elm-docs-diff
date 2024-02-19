@@ -2,15 +2,17 @@ module Main exposing (main)
 
 import Browser
 import Color
-import Dict
-import DocsChanges
+import Dict exposing (Dict)
 import Element exposing (Element)
 import Element.Background
 import Element.Border
 import Element.Font
 import Element.Input
 import Elm.Docs
+import Elm.Docs.Diff
+import Elm.Module.Diff
 import Elm.Pretty
+import Elm.SemanticMagnitude
 import Elm.Syntax.Node
 import Elm.Syntax.Type
 import Elm.Syntax.TypeAlias
@@ -19,12 +21,13 @@ import Elm.Type
 import ElmSyntaxHighlight
 import File exposing (File)
 import File.Select
-import Html exposing (Html)
+import Html
 import Html.Attributes
 import Html.Events
 import Http
 import Json.Decode
 import Pretty
+import Set
 import Task
 
 
@@ -248,11 +251,11 @@ versionToString =
             |> String.join "."
 
 
-magnitudeUi : DocsChanges.Magnitude -> Element event_
+magnitudeUi : Elm.SemanticMagnitude.Magnitude -> Element event_
 magnitudeUi =
     \magnitude ->
         magnitude
-            |> DocsChanges.magnitudeToString
+            |> Elm.SemanticMagnitude.name
             |> Element.text
             |> Element.el
                 [ Element.Font.italic
@@ -270,17 +273,17 @@ removedColor =
     Element.rgb 1 0.15 0.25
 
 
-magnitudeToColor : DocsChanges.Magnitude -> Element.Color
+magnitudeToColor : Elm.SemanticMagnitude.Magnitude -> Element.Color
 magnitudeToColor =
     \magnitude ->
         case magnitude of
-            DocsChanges.Patch ->
+            Elm.SemanticMagnitude.Patch ->
                 Element.rgb 0 0 1
 
-            DocsChanges.Minor ->
+            Elm.SemanticMagnitude.Minor ->
                 addedColor
 
-            DocsChanges.Major ->
+            Elm.SemanticMagnitude.Major ->
                 removedColor
 
 
@@ -292,29 +295,30 @@ ui =
             (case Maybe.map2 Tuple.pair state.earlier.docs state.later.docs of
                 Just ( earlierDocs, laterDocs ) ->
                     let
-                        (DocsChanges.PackageChanges packageChanges) =
-                            ( earlierDocs, laterDocs ) |> DocsChanges.diff
+                        packageChanges : Elm.Docs.Diff.Diff
+                        packageChanges =
+                            { old = earlierDocs, new = laterDocs } |> Elm.Docs.Diff.for
 
                         apiIsUnchanged : Bool
                         apiIsUnchanged =
-                            (packageChanges.modulesAdded |> List.isEmpty)
-                                && (packageChanges.modulesRemoved |> List.isEmpty)
+                            (packageChanges.modulesAdded |> Set.isEmpty)
+                                && (packageChanges.modulesRemoved |> Set.isEmpty)
                                 && (packageChanges.modulesChanged |> Dict.isEmpty)
                     in
                     if apiIsUnchanged then
                         [ "→ no API changes, so this is a " |> Element.text
-                        , DocsChanges.Patch |> magnitudeUi
+                        , Elm.SemanticMagnitude.Patch |> magnitudeUi
                         , " version change" |> Element.text
                         ]
                             |> Element.paragraph []
 
                     else
                         [ [ "→ " |> Element.text
-                          , DocsChanges.PackageChanges packageChanges |> DocsChanges.toMagnitude |> magnitudeUi
+                          , packageChanges |> Elm.Docs.Diff.toMagnitude |> magnitudeUi
                           , " version change" |> Element.text
                           ]
                             |> Element.paragraph [ Element.Font.size 23 ]
-                        , DocsChanges.PackageChanges packageChanges
+                        , packageChanges
                             |> packageChangesUi
                         ]
                             |> Element.column
@@ -453,21 +457,22 @@ syntaxKindToColor =
 
 {-| Mostly an elm port of <https://github.com/elm/compiler/blob/2f6dd29258e880dbb7effd57a829a0470d8da48b/terminal/src/Diff.hs#L21>
 -}
-packageChangesUi : DocsChanges.PackageChanges -> Element event_
+packageChangesUi : Elm.Docs.Diff.Diff -> Element event_
 packageChangesUi =
-    \(DocsChanges.PackageChanges changes) ->
+    \changes ->
         let
             removedChunk : List Chunk
             removedChunk =
-                if changes.modulesRemoved |> List.isEmpty then
+                if changes.modulesRemoved |> Set.isEmpty then
                     []
 
                 else
                     [ Chunk
                         { title = "removed modules"
-                        , magnitude = DocsChanges.Major
+                        , magnitude = Elm.SemanticMagnitude.Major
                         , details =
                             changes.modulesRemoved
+                                |> Set.toList
                                 |> List.map
                                     (\moduleName ->
                                         [ { string = moduleName, syntaxKind = ElmSyntaxHighlight.ModuleNameOrAlias |> Just } ]
@@ -479,15 +484,16 @@ packageChangesUi =
 
             addedChunk : List Chunk
             addedChunk =
-                if changes.modulesAdded |> List.isEmpty then
+                if changes.modulesAdded |> Set.isEmpty then
                     []
 
                 else
                     [ Chunk
                         { title = "added modules"
-                        , magnitude = DocsChanges.Minor
+                        , magnitude = Elm.SemanticMagnitude.Minor
                         , details =
                             changes.modulesAdded
+                                |> Set.toList
                                 |> List.map
                                     (\moduleName ->
                                         [ { string = moduleName, syntaxKind = ElmSyntaxHighlight.ModuleNameOrAlias |> Just } ]
@@ -522,18 +528,25 @@ chunkToDoc (Chunk chunk) =
         |> Element.column []
 
 
-moduleChangesToChunk : ( String, DocsChanges.ModuleChanges ) -> Chunk
-moduleChangesToChunk ( moduleName, DocsChanges.ModuleChanges moduleChanges ) =
+moduleChangesToChunk : ( String, Elm.Module.Diff.Diff ) -> Chunk
+moduleChangesToChunk ( moduleName, moduleChanges ) =
     let
-        magnitude : DocsChanges.Magnitude
+        magnitude : Elm.SemanticMagnitude.Magnitude
         magnitude =
-            DocsChanges.ModuleChanges moduleChanges |> DocsChanges.moduleChangeToMagnitude
+            moduleChanges |> Elm.Module.Diff.toMagnitude
 
-        changesToDocTriple : (k -> v -> Element Never) -> DocsChanges.Changes k v -> ( List (Element Never), List (Element Never), List (Element Never) )
-        changesToDocTriple entryToDoc (DocsChanges.Changes changes) =
+        changesToDocTriple :
+            (String -> v -> Element Never)
+            ->
+                { added : Dict String v
+                , changed : Dict String { old : v, new : v }
+                , removed : Dict String v
+                }
+            -> ( List (Element Never), List (Element Never), List (Element Never) )
+        changesToDocTriple entryToDoc changes =
             let
-                diffed : ( k, ( v, v ) ) -> Element Never
-                diffed ( name, ( oldValue, newValue ) ) =
+                diffed : ( String, { old : v, new : v } ) -> Element Never
+                diffed ( name, value ) =
                     [ [ "–"
                             |> Element.text
                             |> Element.el
@@ -545,7 +558,7 @@ moduleChangesToChunk ( moduleName, DocsChanges.ModuleChanges moduleChanges ) =
                                 , Element.Font.size 27
                                 , Element.Font.family [ Element.Font.monospace ]
                                 ]
-                      , entryToDoc name oldValue
+                      , entryToDoc name value.old
                       ]
                         |> Element.row [ Element.spacing 10 ]
                     , [ "+"
@@ -557,16 +570,18 @@ moduleChangesToChunk ( moduleName, DocsChanges.ModuleChanges moduleChanges ) =
                                 , Element.Font.size 23
                                 , Element.Font.family [ Element.Font.monospace ]
                                 ]
-                      , entryToDoc name newValue
+                      , entryToDoc name value.new
                       ]
                         |> Element.row [ Element.spacing 10 ]
                     ]
                         |> Element.column [ Element.spacing 5 ]
             in
-            ( Dict.toList changes.added
+            ( changes.added
+                |> Dict.toList
                 |> List.map (\( name, value ) -> entryToDoc name value)
-            , List.map diffed (Dict.toList changes.changed)
-            , Dict.toList changes.removed
+            , changes.changed |> Dict.toList |> List.map diffed
+            , changes.removed
+                |> Dict.toList
                 |> List.map (\( name, value ) -> entryToDoc name value)
             )
 
@@ -885,7 +900,7 @@ type SemanticVersion
 type Chunk
     = Chunk
         { title : String
-        , magnitude : DocsChanges.Magnitude
+        , magnitude : Elm.SemanticMagnitude.Magnitude
         , details : Element Never
         }
 
