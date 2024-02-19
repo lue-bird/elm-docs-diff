@@ -224,7 +224,10 @@ fetchPackageDocs =
     \(VersionedFullPackageName fullName) ->
         Http.get
             { url =
-                [ "https://package.elm-lang.org/packages/"
+                [ -- https://package.elm-lang.org/packages/
+                  -- does not respond with a header Access-Control-Allow-Origin, so we can't directly fetch data programatically
+                  -- However, we can go through a proxy like elm.dmy.fr which adds this header
+                  "https://elm.dmy.fr/packages/"
                 , fullName.author
                 , "/"
                 , fullName.name
@@ -259,12 +262,12 @@ magnitudeUi =
 
 addedColor : Element.Color
 addedColor =
-    Element.rgb 0 1 0
+    Element.rgb 0.1 0.9 0.2
 
 
 removedColor : Element.Color
 removedColor =
-    Element.rgb 1 0 0
+    Element.rgb 1 0.15 0.25
 
 
 magnitudeToColor : DocsChanges.Magnitude -> Element.Color
@@ -317,14 +320,10 @@ ui =
                             |> Element.column
                                 [ Element.spacing 50
                                 , Element.height Element.fill
-                                , Element.width Element.fill
                                 , Element.paddingEach { top = 50, left = 80, right = 40, bottom = 20 }
                                 ]
                             |> Element.el
-                                [ --Element.scrollbarY
-                                  -- , Html.Attributes.style "overflow-y" "auto" |> Element.htmlAttribute
-                                  Element.height Element.fill
-                                , Element.width Element.fill
+                                [ Element.height Element.fill
                                 ]
 
                 Nothing ->
@@ -334,7 +333,7 @@ ui =
                             |> Element.map (\event -> DocsJsonSourceEvent { earlierOrLater = Earlier, event = event })
                         ]
                             |> Element.column
-                                [ Element.spacing 20
+                                [ Element.spacing 35
                                 , Element.height Element.fill
                                 ]
                       , [ "later" |> header
@@ -342,14 +341,14 @@ ui =
                             |> docsJsonSourceUi
                             |> Element.map (\event -> DocsJsonSourceEvent { earlierOrLater = Later, event = event })
                         ]
-                            |> List.map (Element.el [ Element.alignTop ])
                             |> Element.column
-                                [ Element.spacing 20
+                                [ Element.spacing 35
                                 , Element.height Element.fill
                                 ]
                       ]
-                        |> Element.row
-                            [ Element.spacing 100
+                        |> rowCenteredUi
+                            [ Element.spacing 150
+                            , Element.height Element.fill
                             ]
                     , case state.latestError of
                         Nothing ->
@@ -362,8 +361,9 @@ ui =
                     ]
                         |> Element.column
                             [ Element.spacing 80
+                            , Element.paddingEach { top = 50, left = 80, right = 40, bottom = 20 }
+                            , Element.height Element.fill
                             ]
-                        |> Element.el [ Element.paddingEach { top = 50, left = 80, right = 40, bottom = 20 } ]
             )
                 |> Element.layout
                     [ Element.Background.color (Element.rgb 0 0 0)
@@ -373,20 +373,36 @@ ui =
         }
 
 
-elmCodeBlockUi : ElmSyntaxHighlight.SyntaxHighlightable -> Element event_
-elmCodeBlockUi elmCode =
+rowCenteredUi : List (Element.Attribute event) -> List (Element.Element event) -> Element.Element event
+rowCenteredUi attributes =
+    \elements ->
+        elements
+            |> List.indexedMap
+                (\index element ->
+                    if index == 0 then
+                        Element.el
+                            [ Element.htmlAttribute (Html.Attributes.style "marginLeft" "auto") ]
+                            element
+
+                    else if index == (elements |> List.length) - 1 then
+                        Element.el
+                            [ Element.htmlAttribute (Html.Attributes.style "marginRight" "auto") ]
+                            element
+
+                    else
+                        element
+                )
+            |> Element.row
+                attributes
+
+
+elmCodeUi : ElmSyntaxHighlight.SyntaxHighlightable -> Element event_
+elmCodeUi syntaxHighlightable =
     Html.code
         [ Html.Attributes.style "font-size" "0.8em"
         , Html.Attributes.style "line-height" "1.5"
         ]
-        [ elmCode |> elmCodeUi ]
-        |> Element.html
-
-
-elmCodeUi : ElmSyntaxHighlight.SyntaxHighlightable -> Html event_
-elmCodeUi =
-    \syntaxHighlightable ->
-        Html.code []
+        [ Html.code []
             (syntaxHighlightable
                 |> List.map
                     (\segment ->
@@ -404,6 +420,8 @@ elmCodeUi =
                             ]
                     )
             )
+        ]
+        |> Element.html
 
 
 syntaxKindToColor : ElmSyntaxHighlight.SyntaxKind -> Color.Color
@@ -453,7 +471,7 @@ packageChangesUi =
                                 |> List.map
                                     (\moduleName ->
                                         [ { string = moduleName, syntaxKind = ElmSyntaxHighlight.ModuleNameOrAlias |> Just } ]
-                                            |> elmCodeBlockUi
+                                            |> elmCodeUi
                                     )
                                 |> Element.column [ Element.spacing 0 ]
                         }
@@ -473,7 +491,7 @@ packageChangesUi =
                                 |> List.map
                                     (\moduleName ->
                                         [ { string = moduleName, syntaxKind = ElmSyntaxHighlight.ModuleNameOrAlias |> Just } ]
-                                            |> elmCodeBlockUi
+                                            |> elmCodeUi
                                     )
                                 |> Element.column [ Element.spacing 0 ]
                         }
@@ -621,7 +639,7 @@ moduleChangesToChunk ( moduleName, DocsChanges.ModuleChanges moduleChanges ) =
 
 changedColor : Element.Color
 changedColor =
-    Element.rgb 1 1 0
+    Element.rgb 0.9 0.8 0.1
 
 
 unionToDoc : String -> Elm.Docs.Union -> Element event_
@@ -637,7 +655,7 @@ unionToDoc _ union =
                         |> List.map (\attachment -> { string = attachment, syntaxKind = ElmSyntaxHighlight.Variable |> Just })
                         |> List.intersperse { string = " ", syntaxKind = Nothing }
                    )
-                |> elmCodeBlockUi
+                |> elmCodeUi
 
         _ :: _ ->
             union
@@ -645,7 +663,7 @@ unionToDoc _ union =
                 |> Elm.Pretty.prettyCustomType
                 |> Pretty.pretty 60
                 |> ElmSyntaxHighlight.for
-                |> elmCodeBlockUi
+                |> elmCodeUi
 
 
 docsTypeToSyntaxNode : Elm.Type.Type -> Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation
@@ -679,7 +697,7 @@ aliasToDoc _ docsAlias =
         |> Elm.Pretty.prettyTypeAlias
         |> Pretty.pretty 110
         |> ElmSyntaxHighlight.for
-        |> elmCodeBlockUi
+        |> elmCodeUi
 
 
 docsAliasToSyntax : Elm.Docs.Alias -> Elm.Syntax.TypeAlias.TypeAlias
@@ -700,7 +718,7 @@ valueToDoc _ docsValue =
         |> Elm.Pretty.prettySignature
         |> Pretty.pretty 60
         |> ElmSyntaxHighlight.for
-        |> elmCodeBlockUi
+        |> elmCodeUi
 
 
 header : String -> Element event_
@@ -730,24 +748,26 @@ docsJsonSourceUi : DocsJsonSourceState -> Element DocsJsonSourceEvent
 docsJsonSourceUi =
     \state ->
         case state.docs of
+            Just _ ->
+                "✔️ docs.json added" |> Element.text
+
             Nothing ->
-                [ Element.row [ Element.spacing 30 ]
-                    [ [ "package" |> spanningLabel
+                [ [ [ [ "package" |> Element.text
                       , [ textInputUi { state = state.packageAuthor, label = "author" }
                             |> Element.map PackageAuthorChanged
                             |> Element.el
-                                [ Element.width (Element.fill |> Element.minimum 80)
+                                [ Element.width (Element.shrink |> Element.minimum 80)
                                 ]
                         , textInputUi { state = state.packageName, label = "name" }
                             |> Element.map PackageNameChanged
                             |> Element.el
-                                [ Element.width (Element.fill |> Element.minimum 80)
+                                [ Element.width (Element.shrink |> Element.minimum 80)
                                 ]
                         ]
                             |> Element.row []
                       ]
                         |> Element.column []
-                    , [ "version" |> spanningLabel
+                    , [ "version" |> Element.text
                       , [ textInputUi { state = state.versionMajor, label = "major" }
                             |> Element.map VersionMajorChanged
                         , textInputUi { state = state.versionMinor, label = "minor" }
@@ -759,41 +779,38 @@ docsJsonSourceUi =
                       ]
                         |> Element.column []
                     ]
-                    |> Element.map PackageDocsJsonSourceEvent
-                , case { major = state.versionMajor, minor = state.versionMinor, patch = state.versionPatch } |> semanticVersionFromStrings of
-                    Ok version ->
-                        actionUi "find on package.elm-lang.org"
-                            |> Element.map
-                                (\() ->
-                                    VersionedFullPackageName
-                                        { author = state.packageAuthor
-                                        , name = state.packageName
-                                        , version = version
-                                        }
-                                        |> DocsRequested
-                                )
+                        |> Element.row
+                            [ Element.spacing 30
+                            ]
+                        |> Element.map PackageDocsJsonSourceEvent
+                  , case { major = state.versionMajor, minor = state.versionMinor, patch = state.versionPatch } |> semanticVersionFromStrings of
+                        Err error ->
+                            error |> Element.text
 
-                    Err error ->
-                        error |> Element.text
+                        Ok version ->
+                            actionUi "🌐 fetch"
+                                -- ⬇ 🢃
+                                |> Element.map
+                                    (\() ->
+                                        VersionedFullPackageName
+                                            { author = state.packageAuthor
+                                            , name = state.packageName
+                                            , version = version
+                                            }
+                                            |> DocsRequested
+                                    )
+                  ]
+                    |> Element.column
+                        [ Element.spacing 15
+                        ]
                 , [ "or" |> Element.text
                   , filesSelectUi |> Element.map FilesSelectEvent
                   ]
                     |> Element.row [ Element.spacing 18 ]
                 ]
-                    |> Element.column [ Element.spacing 20 ]
-
-            Just _ ->
-                "✔️ docs.json added" |> Element.text
-
-
-spanningLabel : String -> Element event_
-spanningLabel =
-    \text ->
-        Element.column
-            [ Element.width Element.fill, Element.spacing 4 ]
-            [ text |> Element.text
-            , Element.none
-            ]
+                    |> Element.column
+                        [ Element.spacing 35
+                        ]
 
 
 textInputUi : { state : String, label : String } -> Element String
@@ -833,12 +850,12 @@ semanticVersionFromStrings =
                     |> Ok
 
             _ ->
-                "version parts need to be natural numbers >= 0" |> Err
+                "version parts need to be natural numbers" |> Err
 
 
 filesSelectUi : Element FilesSelectEvent
 filesSelectUi =
-    actionUi "select docs.json file"
+    actionUi "📁 select docs.json file"
         |> Element.map (\() -> FilesSelectClicked)
         |> Element.el
             [ Html.Events.preventDefaultOn "drop"
