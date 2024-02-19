@@ -228,7 +228,7 @@ fetchPackageDocs =
         Http.get
             { url =
                 [ -- https://package.elm-lang.org/packages/
-                  -- does not respond with a header Access-Control-Allow-Origin, so we can't directly fetch data programatically
+                  -- does not respond with a header Access-Control-Allow-Origin, so we can't directly fetch data programmatically
                   -- However, we can go through a proxy like elm.dmy.fr which adds this header
                   "https://elm.dmy.fr/packages/"
                 , fullName.author
