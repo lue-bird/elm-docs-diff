@@ -1,6 +1,6 @@
 elm-stuff
 node_modules
 .vscode
-tests/*docs.json
+*/tests/*docs.json
 build
 zombie
