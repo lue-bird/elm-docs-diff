@@ -37,7 +37,7 @@ jobs:
           elm-version: 0.19.1
       - run: |
           cd web
-          elm make src/Main.elm --output=web/build/main.js
+          elm make src/Main.elm --output=build/main.js
 
       - name: Setup Pages
         uses: actions/configure-pages@v3
