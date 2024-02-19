@@ -35,7 +35,9 @@ jobs:
         uses: jorelali/setup-elm@v5
         with:
           elm-version: 0.19.1
-      - run: elm make web/src/Main.elm --output=web/build/main.js
+      - run: |
+          cd web
+          elm make src/Main.elm --output=web/build/main.js
 
       - name: Install uglify.js
         run: npm install uglify-js -g
