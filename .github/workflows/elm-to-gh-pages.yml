@@ -39,18 +39,13 @@ jobs:
           cd web
           elm make src/Main.elm --output=web/build/main.js
 
-      - name: Install uglify.js
-        run: npm install uglify-js -g
-      - name: Uglify main.js
-        run: uglifyjs main.js --compress "pure_funcs=[F2,F3,F4,F5,F6,F7,F8,F9,A2,A3,A4,A5,A6,A7,A8,A9],pure_getters,keep_fargs=false,unsafe_comps,unsafe" | uglifyjs --mangle --output main.js
-
       - name: Setup Pages
         uses: actions/configure-pages@v3
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v1
         with:
-          path: 'web/'
+          path: './web'
           
       - name: Deploy to GitHub Pages
         id: deployment
