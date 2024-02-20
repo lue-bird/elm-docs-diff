@@ -675,6 +675,10 @@ moduleChangesToChangeLogChunk ( moduleName, moduleChanges ) =
             (moduleChanges.unions.removed |> Dict.values |> List.map unionShortDescription)
             (moduleChanges.aliases.removed |> Dict.keys |> List.map (\aliasName -> "type alias " ++ (aliasName |> toInlineCodeMarkdown)))
             (moduleChanges.values.removed |> Dict.keys |> List.map toInlineCodeMarkdown)
+      , changesToDoc "added"
+            (moduleChanges.unions.added |> Dict.values |> List.map unionShortDescription)
+            (moduleChanges.aliases.added |> Dict.keys |> List.map (\aliasName -> "type alias " ++ (aliasName |> toInlineCodeMarkdown)))
+            (moduleChanges.values.added |> Dict.keys |> List.map toInlineCodeMarkdown)
       , changesToDoc "changed"
             (moduleChanges.unions.changed
                 |> changedToItems unionToString
@@ -685,10 +689,6 @@ moduleChangesToChangeLogChunk ( moduleName, moduleChanges ) =
             (moduleChanges.values.changed
                 |> changedToItems (\value -> value |> valueToString |> toElmCodeBlockMarkdown)
             )
-      , changesToDoc "added"
-            (moduleChanges.unions.added |> Dict.values |> List.map unionShortDescription)
-            (moduleChanges.aliases.added |> Dict.keys |> List.map (\aliasName -> "type alias " ++ (aliasName |> toInlineCodeMarkdown)))
-            (moduleChanges.values.added |> Dict.keys |> List.map toInlineCodeMarkdown)
       ]
         |> List.filterMap identity
         |> String.join "\n"
