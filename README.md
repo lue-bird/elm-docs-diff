@@ -1,6 +1,6 @@
 ## elm-docs-diff
 
-Compare versions of an API using their `docs.json` metadata. It's both
+Compare versions of an API using their `docs.json`. It's both
 
   - a [website](https://lue-bird.github.io/elm-docs-diff/) that allows you to select local `docs.json` files or fetch them online and show a nice diff
   - an unopinionated package that exposes `Elm...Diff` helpers for [packages, modules, declarations and types](https://dark.elm.dmy.fr/packages/elm/project-metadata-utils/latest/Elm-Docs)
