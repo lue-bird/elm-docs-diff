@@ -10,3 +10,6 @@ The idea is for this to be a more general `elm diff` to show changes between for
   - versions of a package that doesn't have a complete change log
   - the original package and a fork or re-publish under a different name
   - versions of private packages
+
+## thanks
+  - rlefevre for [elm.dmy.fr](https://github.com/dmy/elm.dmy.fr) which the website uses as a proxy because it allows fetching package `docs.json`
