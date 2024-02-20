@@ -46,9 +46,9 @@ type Constraint
     even e.g. `variable -> number` a patch change, even though the resulting type gives you more possibilities.
 
 -}
-variable : ( String, String ) -> Elm.SemanticMagnitude.Magnitude
-variable ( old, new ) =
-    case ( variableCategory old, variableCategory new ) of
+variable : { old : String, new : String } -> Elm.SemanticMagnitude.Magnitude
+variable variableNames =
+    case ( variableNames.old |> variableCategory, variableNames.new |> variableCategory ) of
         ( VariableConstrained CompAppend, VariableConstrained CompAppend ) ->
             Elm.SemanticMagnitude.Patch
 
@@ -315,8 +315,8 @@ isEquivalentRenaming varPairs =
 
         Just verifiedRenamings ->
             List.all
-                (\v ->
-                    case v |> variable of
+                (\( old, new ) ->
+                    case { old = old, new = new } |> variable of
                         Elm.SemanticMagnitude.Major ->
                             False
 
