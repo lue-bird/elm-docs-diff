@@ -949,21 +949,21 @@ moduleChangesToChunk ( moduleName, moduleChanges ) =
                                             Element.none
 
                                         union0 :: union1Up ->
-                                            (union0 :: union1Up) |> Element.column [ Element.spacing 20 ]
+                                            (union0 :: union1Up) |> Element.column [ Element.spacing 25 ]
                                    , case aliasesPossiblyFilled of
                                         [] ->
                                             Element.none
 
                                         alias0 :: alias1Up ->
                                             (alias0 :: alias1Up)
-                                                |> List.map (\el -> el |> Element.el [ Element.paddingEach { left = 0, right = 0, top = 10, bottom = 10 } ])
-                                                |> Element.column [ Element.spacing 20 ]
+                                                |> List.map (\el -> el |> Element.el [ Element.paddingEach { left = 0, right = 0, top = 0, bottom = 0 } ])
+                                                |> Element.column [ Element.spacing 14 ]
                                    , case valuesPossiblyFilled of
                                         [] ->
                                             Element.none
 
                                         value0 :: value1Up ->
-                                            (value0 :: value1Up) |> Element.column [ Element.spacing 20 ]
+                                            (value0 :: value1Up) |> Element.column [ Element.spacing 25 ]
                                    ]
                                     |> Element.column
                                         [ Element.spacing 33
