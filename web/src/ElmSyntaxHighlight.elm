@@ -531,7 +531,12 @@ typeAnnotationSyntaxKindMap =
 
             Elm.Syntax.TypeAnnotation.GenericRecord (Node variableRange _) (Node _ additionalFields) ->
                 additionalFields
-                    |> RangeDict.unionFromListMap (\(Node _ ( _, field )) -> field |> typeAnnotationSyntaxKindMap)
+                    |> RangeDict.unionFromListMap
+                        (\(Node _ ( Node fieldNameRange _, field )) ->
+                            field
+                                |> typeAnnotationSyntaxKindMap
+                                |> RangeDict.insert fieldNameRange Field
+                        )
                     |> RangeDict.insert variableRange Variable
 
             Elm.Syntax.TypeAnnotation.FunctionTypeAnnotation input output ->
