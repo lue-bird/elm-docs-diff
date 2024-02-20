@@ -1,8 +1,8 @@
-module Elm.Declaration.Diff exposing (aliasIsEquivalent, unionIsEquivalent, valueIsEquivalent)
+module Elm.Declaration.Diff exposing (aliasesAreEquivalent, unionsAreEquivalent, valuesAreEquivalent)
 
 {-| Diff a declaration
 
-@docs aliasIsEquivalent, unionIsEquivalent, valueIsEquivalent
+@docs aliasesAreEquivalent, unionsAreEquivalent, valuesAreEquivalent
 
 -}
 
@@ -18,8 +18,8 @@ import Elm.Type.Diff
 Reminder: Emulates `elm diff` behaviour and therefore explicitly e.g. says exposing the variants necessitates a major version bump.
 
 -}
-unionIsEquivalent : ( Elm.Docs.Union, Elm.Docs.Union ) -> Bool
-unionIsEquivalent ( oldUnion, newUnion ) =
+unionsAreEquivalent : ( Elm.Docs.Union, Elm.Docs.Union ) -> Bool
+unionsAreEquivalent ( oldUnion, newUnion ) =
     let
         variantAttachmentTypesAreEquivalent : ( List Elm.Type.Type, List Elm.Type.Type ) -> Bool
         variantAttachmentTypesAreEquivalent =
@@ -28,7 +28,7 @@ unionIsEquivalent ( oldUnion, newUnion ) =
                     && (List.map2 Tuple.pair
                             (oldTypes |> List.map (\type_ -> { type_ = type_, parameters = oldUnion.args }))
                             (newTypes |> List.map (\type_ -> { type_ = type_, parameters = newUnion.args }))
-                            |> List.all Elm.Type.Diff.isEquivalent
+                            |> List.all Elm.Type.Diff.areEquivalent
                        )
     in
     ((oldUnion.tags |> List.length) == (newUnion.tags |> List.length))
@@ -47,19 +47,19 @@ unionIsEquivalent ( oldUnion, newUnion ) =
 
 {-| Are both [`Elm.Docs.Value`](https://dark.elm.dmy.fr/packages/elm/project-metadata-utils/latest/Elm-Docs#Alias)/function declarations equal?
 -}
-valueIsEquivalent : ( Elm.Docs.Value, Elm.Docs.Value ) -> Bool
-valueIsEquivalent ( oldValue, newValue ) =
+valuesAreEquivalent : ( Elm.Docs.Value, Elm.Docs.Value ) -> Bool
+valuesAreEquivalent ( oldValue, newValue ) =
     ( { type_ = oldValue.tipe, parameters = [] }
     , { type_ = newValue.tipe, parameters = [] }
     )
-        |> Elm.Type.Diff.isEquivalent
+        |> Elm.Type.Diff.areEquivalent
 
 
 {-| Are both type [`Elm.Docs.Alias`](https://dark.elm.dmy.fr/packages/elm/project-metadata-utils/latest/Elm-Docs#Alias) declarations equal?
 -}
-aliasIsEquivalent : ( Elm.Docs.Alias, Elm.Docs.Alias ) -> Bool
-aliasIsEquivalent ( oldTypeAlias, newTypeAlias ) =
+aliasesAreEquivalent : ( Elm.Docs.Alias, Elm.Docs.Alias ) -> Bool
+aliasesAreEquivalent ( oldTypeAlias, newTypeAlias ) =
     ( { type_ = oldTypeAlias.tipe, parameters = oldTypeAlias.args }
     , { type_ = newTypeAlias.tipe, parameters = newTypeAlias.args }
     )
-        |> Elm.Type.Diff.isEquivalent
+        |> Elm.Type.Diff.areEquivalent

@@ -13,7 +13,7 @@ type alias Diff value =
 
 
 withEquivalence : (( v, v ) -> Bool) -> Dict String v -> Dict String v -> Diff v
-withEquivalence isEquivalent old new =
+withEquivalence areEquivalent old new =
     let
         overlap : Dict String { old : v, new : v }
         overlap =
@@ -21,7 +21,7 @@ withEquivalence isEquivalent old new =
 
         changed : Dict String { old : v, new : v }
         changed =
-            Dict.filter (\_ oldAndNew -> not (isEquivalent ( oldAndNew.old, oldAndNew.new ))) overlap
+            Dict.filter (\_ oldAndNew -> not (areEquivalent ( oldAndNew.old, oldAndNew.new ))) overlap
     in
     { added = Dict.diff new old
     , changed = changed

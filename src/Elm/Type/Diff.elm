@@ -1,11 +1,11 @@
 module Elm.Type.Diff exposing
-    ( isEquivalent
+    ( areEquivalent
     , Constraint(..), VariableCategory(..), variable, variableCategory
     )
 
 {-| Diff an [`Elm.Type.Type`](https://dark.elm.dmy.fr/packages/elm/project-metadata-utils/latest/Elm-Type#Type)
 
-@docs isEquivalent
+@docs areEquivalent
 
 
 ## variables
@@ -264,12 +264,12 @@ Put `parameters = []` for value/function/port declaration types
 otherwise provide the variable names after the declared name for `type`/`type alias` declarations.
 
 -}
-isEquivalent :
+areEquivalent :
     ( { type_ : Elm.Type.Type, parameters : List String }
     , { type_ : Elm.Type.Type, parameters : List String }
     )
     -> Bool
-isEquivalent ( oldTypeAlias, newTypeAlias ) =
+areEquivalent ( oldTypeAlias, newTypeAlias ) =
     case ( oldTypeAlias.type_, newTypeAlias.type_ ) |> for of
         Nothing ->
             False

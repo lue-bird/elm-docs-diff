@@ -40,15 +40,15 @@ type alias Diff =
 for : { old : Elm.Docs.Module, new : Elm.Docs.Module } -> Diff
 for module_ =
     { unions =
-        Diff.withEquivalence Elm.Declaration.Diff.unionIsEquivalent
+        Diff.withEquivalence Elm.Declaration.Diff.unionsAreEquivalent
             (module_.old.unions |> List.map (\union -> ( union.name, union )) |> Dict.fromList)
             (module_.new.unions |> List.map (\union -> ( union.name, union )) |> Dict.fromList)
     , aliases =
-        Diff.withEquivalence Elm.Declaration.Diff.aliasIsEquivalent
+        Diff.withEquivalence Elm.Declaration.Diff.aliasesAreEquivalent
             (module_.old.aliases |> List.map (\alias -> ( alias.name, alias )) |> Dict.fromList)
             (module_.new.aliases |> List.map (\alias -> ( alias.name, alias )) |> Dict.fromList)
     , values =
-        Diff.withEquivalence Elm.Declaration.Diff.valueIsEquivalent
+        Diff.withEquivalence Elm.Declaration.Diff.valuesAreEquivalent
             (module_.old.values |> List.map (\value -> ( value.name, value )) |> Dict.fromList)
             (module_.new.values |> List.map (\value -> ( value.name, value )) |> Dict.fromList)
     }
