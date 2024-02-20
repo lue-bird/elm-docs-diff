@@ -10,6 +10,3 @@ The idea is for this to be a more general `elm diff` to show changes between for
   - versions of a package that doesn't have a complete change log
   - the original package and a fork or re-publish under a different name
   - versions of private packages
-
-## TODO
-  - a way to generate a textual form like `elm diff` that can for example be used to fill in missing change log items

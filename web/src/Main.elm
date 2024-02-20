@@ -36,6 +36,7 @@ type State
         { earlier : DocsJsonSourceState
         , later : DocsJsonSourceState
         , latestError : Maybe String
+        , diffViewKind : DiffViewKind
         }
 
 
@@ -51,6 +52,7 @@ type alias DocsJsonSourceState =
 
 type Event
     = DocsJsonSourceEvent { earlierOrLater : EarlierOrLater, event : DocsJsonSourceEvent }
+    | DiffViewKindSelected DiffViewKind
 
 
 type EarlierOrLater
@@ -103,6 +105,7 @@ initialState =
             , docs = Nothing
             }
         , latestError = Nothing
+        , diffViewKind = DiffViewKindHighlighted
         }
 
 
@@ -208,6 +211,12 @@ reactTo event =
                         , Cmd.none
                         )
 
+        DiffViewKindSelected newDiffViewKind ->
+            \(State state) ->
+                ( { state | diffViewKind = newDiffViewKind } |> State
+                , Cmd.none
+                )
+
 
 earlierOrLaterFieldAlter :
     EarlierOrLater
@@ -287,6 +296,11 @@ magnitudeToColor =
                 removedColor
 
 
+type DiffViewKind
+    = DiffViewKindHighlighted
+    | DiffViewKindChangeLog
+
+
 ui : State -> Browser.Document Event
 ui =
     \(State state) ->
@@ -313,14 +327,21 @@ ui =
                             |> Element.paragraph []
 
                     else
-                        [ [ "→ " |> Element.text
-                          , packageChanges |> Elm.Docs.Diff.toMagnitude |> magnitudeUi
-                          , " version change" |> Element.text
+                        [ [ [ [ "→ " |> Element.text
+                              , packageChanges |> Elm.Docs.Diff.toMagnitude |> magnitudeUi
+                              , " version change" |> Element.text
+                              ]
+                                |> Element.paragraph
+                                    [ Element.Font.size 23
+                                    ]
+                            , diffViewKindUi state.diffViewKind
+                            ]
+                                |> Element.column
+                                    [ Element.spacing 10
+                                    , Html.Attributes.style "user-select" "none" |> Element.htmlAttribute
+                                    ]
+                          , packageChanges |> packageChangesUi state.diffViewKind
                           ]
-                            |> Element.paragraph [ Element.Font.size 23 ]
-                        , packageChanges
-                            |> packageChangesUi
-                        ]
                             |> Element.column
                                 [ Element.spacing 50
                                 , Element.height Element.fill
@@ -329,6 +350,8 @@ ui =
                             |> Element.el
                                 [ Element.height Element.fill
                                 ]
+                        ]
+                            |> Element.column [ Element.spacing 40 ]
 
                 Nothing ->
                     [ [ [ "earlier" |> header
@@ -375,6 +398,67 @@ ui =
                     ]
                 |> List.singleton
         }
+
+
+diffViewKindUi : DiffViewKind -> Element Event
+diffViewKindUi selectedDiffViewKind =
+    [ [ "👁 " |> Element.text -- 💡🔭
+      , ([ "Currently in "
+         , case selectedDiffViewKind of
+            DiffViewKindHighlighted ->
+                "highlighted"
+
+            DiffViewKindChangeLog ->
+                "change log"
+         , " view. Try also "
+         ]
+            |> String.concat
+        )
+            |> Element.text
+            |> Element.el [ Element.Font.italic ]
+      ]
+        |> Element.row []
+    , Element.Input.radioRow
+        [ Element.alignRight
+        , Element.width Element.fill
+        , Element.spacing 20
+        ]
+        { onChange = DiffViewKindSelected
+        , options =
+            [ ( DiffViewKindHighlighted, "🖍️ highlighted view" ) -- ✨
+            , ( DiffViewKindChangeLog, "\u{1FAB5} change log view" )
+            ]
+                |> List.filter (\( viewKind, _ ) -> viewKind /= selectedDiffViewKind)
+                |> List.map
+                    (\( diffViewKind, diffViewKindName ) ->
+                        Element.Input.optionWith diffViewKind
+                            (\optionState ->
+                                case optionState of
+                                    Element.Input.Idle ->
+                                        diffViewKindName
+                                            |> Element.text
+                                            |> Element.el
+                                                [ Element.Font.color interactiveColor ]
+
+                                    Element.Input.Focused ->
+                                        diffViewKindName
+                                            |> Element.text
+                                            |> Element.el
+                                                [ Element.Font.color interactiveColor ]
+
+                                    Element.Input.Selected ->
+                                        [ "active: " |> Element.text
+                                        , diffViewKindName
+                                            |> Element.text
+                                        ]
+                                            |> Element.row []
+                            )
+                    )
+        , selected = selectedDiffViewKind |> Just
+        , label = Element.Input.labelHidden "diff view kind"
+        }
+    ]
+        |> Element.row [ Element.spacing 5 ]
 
 
 rowCenteredUi : List (Element.Attribute event) -> List (Element.Element event) -> Element.Element event
@@ -455,15 +539,205 @@ syntaxKindToColor =
                 Color.rgb 0.55 0.75 1
 
 
-{-| Mostly an elm port of <https://github.com/elm/compiler/blob/2f6dd29258e880dbb7effd57a829a0470d8da48b/terminal/src/Diff.hs#L21>
--}
-packageChangesUi : Elm.Docs.Diff.Diff -> Element event_
-packageChangesUi =
-    \changes ->
+packageChangesUi : DiffViewKind -> (Elm.Docs.Diff.Diff -> Element event_)
+packageChangesUi diffViewKind =
+    case diffViewKind of
+        DiffViewKindHighlighted ->
+            packageChangesHighlightedUi
+
+        DiffViewKindChangeLog ->
+            packageChangesChangeLogUi
+
+
+packageChangesChangeLogUi : Elm.Docs.Diff.Diff -> Element event_
+packageChangesChangeLogUi =
+    \diff ->
+        [ [ "🗒  " |> Element.text
+          , "Ctrl+A then Ctrl+C to yoink"
+                |> Element.text
+                |> Element.el
+                    [ Element.Font.italic
+                    ]
+          ]
+            |> Element.row [ Html.Attributes.style "user-select" "none" |> Element.htmlAttribute ]
+        , [ diff.modulesRemoved
+                |> Set.toList
+                |> List.map
+                    (\moduleName ->
+                        "  - removed module " ++ (moduleName |> toInlineCodeMarkdown)
+                    )
+          , diff.modulesAdded
+                |> Set.toList
+                |> List.map
+                    (\moduleName ->
+                        "  - added module " ++ (moduleName |> toInlineCodeMarkdown)
+                    )
+          , diff.modulesChanged |> Dict.toList |> List.map moduleChangesToChangeLogChunk
+          ]
+            |> List.concat
+            |> String.join "\n"
+            |> Html.text
+            |> List.singleton
+            |> Html.pre []
+            |> Element.html
+        ]
+            |> Element.column [ Element.spacing 20 ]
+
+
+toElmCodeBlockMarkdown : String -> String
+toElmCodeBlockMarkdown =
+    \code ->
+        [ "\n```elm\n"
+        , code
+        , "\n```"
+        ]
+            |> String.concat
+
+
+toInlineCodeMarkdown : String -> String
+toInlineCodeMarkdown =
+    \string -> [ "`", string, "`" ] |> String.concat
+
+
+indentAfterFirstLine : String -> String
+indentAfterFirstLine =
+    \string ->
+        case string |> String.split "\n" of
+            [] ->
+                string
+
+            line0 :: line1Up ->
+                line0
+                    :: (line1Up |> List.map (\line -> "    " ++ line))
+                    |> String.join "\n"
+
+
+indent : String -> String
+indent =
+    \string ->
+        string
+            |> String.split "\n"
+            |> List.map (\line -> "    " ++ line)
+            |> String.join "\n"
+
+
+moduleChangesToChangeLogChunk : ( String, Elm.Module.Diff.Diff ) -> String
+moduleChangesToChangeLogChunk ( moduleName, moduleChanges ) =
+    let
+        changedToItems :
+            (v -> String)
+            -> Dict String { old : v, new : v }
+            -> List String
+        changedToItems entryToDoc changed =
+            changed
+                |> Dict.toList
+                |> List.map
+                    (\( _, value ) ->
+                        [ entryToDoc value.old
+                        , "\nto"
+                        , entryToDoc value.new
+                        ]
+                            |> String.concat
+                    )
+
+        changesToDoc : String -> List String -> List String -> List String -> Maybe String
+        changesToDoc categoryName unions aliases values =
+            case ( unions, aliases, values ) of
+                ( [], [], [] ) ->
+                    Nothing
+
+                ( unionsPossiblyFilled, aliasesPossiblyFilled, valuesPossiblyFilled ) ->
+                    ([ unionsPossiblyFilled
+                     , aliasesPossiblyFilled
+                     , valuesPossiblyFilled
+                     ]
+                        |> List.concat
+                        |> List.map
+                            (\item ->
+                                [ "  - "
+                                , categoryName
+                                , " "
+                                , item |> indentAfterFirstLine
+                                ]
+                                    |> String.concat
+                            )
+                        |> String.join "\n"
+                    )
+                        |> Just
+
+        unionShortDescription : Elm.Docs.Union -> String
+        unionShortDescription =
+            \union ->
+                case union.tags of
+                    [] ->
+                        [ "opaque type "
+                        , (union.name ++ (union.args |> List.map (\par -> " " ++ par) |> String.join " "))
+                            |> toInlineCodeMarkdown
+                        ]
+                            |> String.concat
+
+                    _ :: _ ->
+                        [ "type "
+                        , (union.name ++ (union.args |> List.map (\par -> " " ++ par) |> String.join " "))
+                            |> toInlineCodeMarkdown
+                        , " with exposed variants"
+                        ]
+                            |> String.concat
+
+        unionToString : Elm.Docs.Union -> String
+        unionToString =
+            \union ->
+                case union.tags of
+                    [] ->
+                        [ "opaque type "
+                        , (union.name ++ (union.args |> List.map (\par -> " " ++ par) |> String.join " "))
+                            |> toInlineCodeMarkdown
+                        ]
+                            |> String.concat
+
+                    _ :: _ ->
+                        union
+                            |> docsUnionToSyntax
+                            |> Elm.Pretty.prettyCustomType
+                            |> Pretty.pretty 60
+                            |> toElmCodeBlockMarkdown
+    in
+    [ "  - in "
+    , moduleName |> toInlineCodeMarkdown
+    , "\n"
+    , [ changesToDoc "removed"
+            (moduleChanges.unions.removed |> Dict.values |> List.map unionShortDescription)
+            (moduleChanges.aliases.removed |> Dict.keys |> List.map (\aliasName -> "type alias " ++ (aliasName |> toInlineCodeMarkdown)))
+            (moduleChanges.values.removed |> Dict.keys |> List.map toInlineCodeMarkdown)
+      , changesToDoc "changed"
+            (moduleChanges.unions.changed
+                |> changedToItems unionToString
+            )
+            (moduleChanges.aliases.changed
+                |> changedToItems (\alias -> alias |> aliasToString |> toElmCodeBlockMarkdown)
+            )
+            (moduleChanges.values.changed
+                |> changedToItems (\value -> value |> valueToString |> toElmCodeBlockMarkdown)
+            )
+      , changesToDoc "added"
+            (moduleChanges.unions.added |> Dict.values |> List.map unionShortDescription)
+            (moduleChanges.aliases.added |> Dict.keys |> List.map (\aliasName -> "type alias " ++ (aliasName |> toInlineCodeMarkdown)))
+            (moduleChanges.values.added |> Dict.keys |> List.map toInlineCodeMarkdown)
+      ]
+        |> List.filterMap identity
+        |> String.join "\n"
+        |> indent
+    ]
+        |> String.concat
+
+
+packageChangesHighlightedUi : Elm.Docs.Diff.Diff -> Element event_
+packageChangesHighlightedUi =
+    \diff ->
         let
-            removedChunk : List Chunk
+            removedChunk : List (Chunk (Element Never))
             removedChunk =
-                if changes.modulesRemoved |> Set.isEmpty then
+                if diff.modulesRemoved |> Set.isEmpty then
                     []
 
                 else
@@ -471,7 +745,7 @@ packageChangesUi =
                         { title = "removed modules"
                         , magnitude = Elm.SemanticMagnitude.Major
                         , details =
-                            changes.modulesRemoved
+                            diff.modulesRemoved
                                 |> Set.toList
                                 |> List.map
                                     (\moduleName ->
@@ -482,9 +756,9 @@ packageChangesUi =
                         }
                     ]
 
-            addedChunk : List Chunk
+            addedChunk : List (Chunk (Element Never))
             addedChunk =
-                if changes.modulesAdded |> Set.isEmpty then
+                if diff.modulesAdded |> Set.isEmpty then
                     []
 
                 else
@@ -492,7 +766,7 @@ packageChangesUi =
                         { title = "added modules"
                         , magnitude = Elm.SemanticMagnitude.Minor
                         , details =
-                            changes.modulesAdded
+                            diff.modulesAdded
                                 |> Set.toList
                                 |> List.map
                                     (\moduleName ->
@@ -505,7 +779,7 @@ packageChangesUi =
         in
         [ removedChunk
         , addedChunk
-        , changes.modulesChanged |> Dict.toList |> List.map moduleChangesToChunk
+        , diff.modulesChanged |> Dict.toList |> List.map moduleChangesToChunk
         ]
             |> List.concat
             |> List.map (\chunk -> chunk |> chunkToDoc)
@@ -515,7 +789,7 @@ packageChangesUi =
                 ]
 
 
-chunkToDoc : Chunk -> Element event_
+chunkToDoc : Chunk (Element Never) -> Element event_
 chunkToDoc (Chunk chunk) =
     [ [ (chunk.title ++ " ") |> Element.text
       , chunk.magnitude |> magnitudeUi
@@ -528,7 +802,7 @@ chunkToDoc (Chunk chunk) =
         |> Element.column []
 
 
-moduleChangesToChunk : ( String, Elm.Module.Diff.Diff ) -> Chunk
+moduleChangesToChunk : ( String, Elm.Module.Diff.Diff ) -> Chunk (Element Never)
 moduleChangesToChunk ( moduleName, moduleChanges ) =
     let
         magnitude : Elm.SemanticMagnitude.Magnitude
@@ -536,7 +810,7 @@ moduleChangesToChunk ( moduleName, moduleChanges ) =
             moduleChanges |> Elm.Module.Diff.toMagnitude
 
         changesToDocTriple :
-            (String -> v -> Element Never)
+            (v -> ElmSyntaxHighlight.SyntaxHighlightable)
             ->
                 { added : Dict String v
                 , changed : Dict String { old : v, new : v }
@@ -545,8 +819,8 @@ moduleChangesToChunk ( moduleName, moduleChanges ) =
             -> ( List (Element Never), List (Element Never), List (Element Never) )
         changesToDocTriple entryToDoc changes =
             let
-                diffed : ( String, { old : v, new : v } ) -> Element Never
-                diffed ( name, value ) =
+                diffed : { old : v, new : v } -> Element Never
+                diffed value =
                     [ [ "–"
                             |> Element.text
                             |> Element.el
@@ -558,7 +832,7 @@ moduleChangesToChunk ( moduleName, moduleChanges ) =
                                 , Element.Font.size 27
                                 , Element.Font.family [ Element.Font.monospace ]
                                 ]
-                      , entryToDoc name value.old
+                      , entryToDoc value.old |> elmCodeUi
                       ]
                         |> Element.row [ Element.spacing 10 ]
                     , [ "+"
@@ -570,7 +844,7 @@ moduleChangesToChunk ( moduleName, moduleChanges ) =
                                 , Element.Font.size 23
                                 , Element.Font.family [ Element.Font.monospace ]
                                 ]
-                      , entryToDoc name value.new
+                      , entryToDoc value.new |> elmCodeUi
                       ]
                         |> Element.row [ Element.spacing 10 ]
                     ]
@@ -578,21 +852,24 @@ moduleChangesToChunk ( moduleName, moduleChanges ) =
             in
             ( changes.added
                 |> Dict.toList
-                |> List.map (\( name, value ) -> entryToDoc name value)
-            , changes.changed |> Dict.toList |> List.map diffed
+                |> List.map (\( _, value ) -> entryToDoc value |> elmCodeUi)
+            , changes.changed |> Dict.toList |> List.map (\( _, value ) -> diffed value)
             , changes.removed
                 |> Dict.toList
-                |> List.map (\( name, value ) -> entryToDoc name value)
+                |> List.map (\( _, value ) -> entryToDoc value |> elmCodeUi)
             )
 
         ( unionAdd, unionChange, unionRemove ) =
-            changesToDocTriple unionToDoc moduleChanges.unions
+            moduleChanges.unions
+                |> changesToDocTriple (\docsUnion -> docsUnion |> unionToSyntaxHighlightable)
 
         ( aliasAdd, aliasChange, aliasRemove ) =
-            changesToDocTriple aliasToDoc moduleChanges.aliases
+            moduleChanges.aliases
+                |> changesToDocTriple (\docsAlias -> docsAlias |> aliasToString |> ElmSyntaxHighlight.for)
 
         ( valueAdd, valueChange, valueRemove ) =
-            changesToDocTriple valueToDoc moduleChanges.values
+            moduleChanges.values
+                |> changesToDocTriple (\docsValue -> docsValue |> valueToString |> ElmSyntaxHighlight.for)
     in
     Chunk
         { title = moduleName
@@ -657,8 +934,8 @@ changedColor =
     Element.rgb 0.9 0.8 0.1
 
 
-unionToDoc : String -> Elm.Docs.Union -> Element event_
-unionToDoc _ union =
+unionToSyntaxHighlightable : Elm.Docs.Union -> ElmSyntaxHighlight.SyntaxHighlightable
+unionToSyntaxHighlightable union =
     case union.tags of
         [] ->
             [ { string = "type", syntaxKind = ElmSyntaxHighlight.DeclarationRelated |> Just }
@@ -670,7 +947,6 @@ unionToDoc _ union =
                         |> List.map (\attachment -> { string = attachment, syntaxKind = ElmSyntaxHighlight.Variable |> Just })
                         |> List.intersperse { string = " ", syntaxKind = Nothing }
                    )
-                |> elmCodeUi
 
         _ :: _ ->
             union
@@ -678,7 +954,6 @@ unionToDoc _ union =
                 |> Elm.Pretty.prettyCustomType
                 |> Pretty.pretty 60
                 |> ElmSyntaxHighlight.for
-                |> elmCodeUi
 
 
 docsTypeToSyntaxNode : Elm.Type.Type -> Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation
@@ -705,14 +980,13 @@ docsUnionToSyntax =
         }
 
 
-aliasToDoc : String -> Elm.Docs.Alias -> Element event_
-aliasToDoc _ docsAlias =
-    docsAlias
-        |> docsAliasToSyntax
-        |> Elm.Pretty.prettyTypeAlias
-        |> Pretty.pretty 110
-        |> ElmSyntaxHighlight.for
-        |> elmCodeUi
+aliasToString : Elm.Docs.Alias -> String
+aliasToString =
+    \docsAlias ->
+        docsAlias
+            |> docsAliasToSyntax
+            |> Elm.Pretty.prettyTypeAlias
+            |> Pretty.pretty 60
 
 
 docsAliasToSyntax : Elm.Docs.Alias -> Elm.Syntax.TypeAlias.TypeAlias
@@ -725,15 +999,14 @@ docsAliasToSyntax =
         }
 
 
-valueToDoc : String -> Elm.Docs.Value -> Element event_
-valueToDoc _ docsValue =
-    { name = docsValue.name |> Elm.Syntax.Node.empty
-    , typeAnnotation = docsValue.tipe |> docsTypeToSyntaxNode
-    }
-        |> Elm.Pretty.prettySignature
-        |> Pretty.pretty 60
-        |> ElmSyntaxHighlight.for
-        |> elmCodeUi
+valueToString : Elm.Docs.Value -> String
+valueToString =
+    \docsValue ->
+        { name = docsValue.name |> Elm.Syntax.Node.empty
+        , typeAnnotation = docsValue.tipe |> docsTypeToSyntaxNode
+        }
+            |> Elm.Pretty.prettySignature
+            |> Pretty.pretty 60
 
 
 header : String -> Element event_
@@ -897,11 +1170,11 @@ type SemanticVersion
     = SemanticVersion { major : Int, minor : Int, patch : Int }
 
 
-type Chunk
+type Chunk details
     = Chunk
         { title : String
         , magnitude : Elm.SemanticMagnitude.Magnitude
-        , details : Element Never
+        , details : details
         }
 
 
