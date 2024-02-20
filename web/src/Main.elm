@@ -296,11 +296,6 @@ magnitudeToColor =
                 removedColor
 
 
-type DiffViewKind
-    = DiffViewKindHighlighted
-    | DiffViewKindChangeLog
-
-
 ui : State -> Browser.Document Event
 ui =
     \(State state) ->
@@ -400,6 +395,11 @@ ui =
         }
 
 
+interactiveColor : Element.Color
+interactiveColor =
+    Element.rgb 0.3 0.56 0.9
+
+
 diffViewKindUi : DiffViewKind -> Element Event
 diffViewKindUi selectedDiffViewKind =
     [ [ "👁 " |> Element.text -- 💡🔭
@@ -484,61 +484,6 @@ rowCenteredUi attributes =
                 attributes
 
 
-elmCodeUi : ElmSyntaxHighlight.SyntaxHighlightable -> Element event_
-elmCodeUi syntaxHighlightable =
-    Html.code
-        [ Html.Attributes.style "font-size" "0.8em"
-        , Html.Attributes.style "line-height" "1.5"
-        ]
-        [ Html.code []
-            (syntaxHighlightable
-                |> List.map
-                    (\segment ->
-                        Html.code
-                            (case segment.syntaxKind of
-                                Nothing ->
-                                    []
-
-                                Just syntaxKind ->
-                                    [ Html.Attributes.style "color"
-                                        (syntaxKind |> syntaxKindToColor |> Color.toCssString)
-                                    ]
-                            )
-                            [ Html.text segment.string
-                            ]
-                    )
-            )
-        ]
-        |> Element.html
-
-
-syntaxKindToColor : ElmSyntaxHighlight.SyntaxKind -> Color.Color
-syntaxKindToColor =
-    -- light purple Color.rgb 0.97 0.42 1
-    \syntaxKind ->
-        case syntaxKind of
-            ElmSyntaxHighlight.Type ->
-                Color.rgb 0.9 0.55 1
-
-            ElmSyntaxHighlight.Variant ->
-                Color.rgb 0.24 0.75 0.62
-
-            ElmSyntaxHighlight.Field ->
-                Color.rgb 0.4 0.9 0
-
-            ElmSyntaxHighlight.ModuleNameOrAlias ->
-                Color.rgb 0.45 0.5 1
-
-            ElmSyntaxHighlight.Variable ->
-                Color.rgb 0.85 0.8 0.1
-
-            ElmSyntaxHighlight.Flow ->
-                Color.rgb 1 0.45 0.35
-
-            ElmSyntaxHighlight.DeclarationRelated ->
-                Color.rgb 0.55 0.75 1
-
-
 packageChangesUi : DiffViewKind -> (Elm.Docs.Diff.Diff -> Element event_)
 packageChangesUi diffViewKind =
     case diffViewKind of
@@ -547,6 +492,11 @@ packageChangesUi diffViewKind =
 
         DiffViewKindChangeLog ->
             packageChangesChangeLogUi
+
+
+toInlineCodeMarkdown : String -> String
+toInlineCodeMarkdown =
+    \string -> [ "`", string, "`" ] |> String.concat
 
 
 packageChangesChangeLogUi : Elm.Docs.Diff.Diff -> Element event_
@@ -584,41 +534,57 @@ packageChangesChangeLogUi =
             |> Element.column [ Element.spacing 20 ]
 
 
-toElmCodeBlockMarkdown : String -> String
-toElmCodeBlockMarkdown =
-    \code ->
-        [ "\n```elm\n"
-        , code
-        , "\n```"
-        ]
-            |> String.concat
+aliasToString : Elm.Docs.Alias -> String
+aliasToString =
+    \docsAlias ->
+        docsAlias
+            |> docsAliasToSyntax
+            |> Elm.Pretty.prettyTypeAlias
+            |> Pretty.pretty 60
 
 
-toInlineCodeMarkdown : String -> String
-toInlineCodeMarkdown =
-    \string -> [ "`", string, "`" ] |> String.concat
+docsTypeToSyntaxNode : Elm.Type.Type -> Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation
+docsTypeToSyntaxNode =
+    \innerDocsType ->
+        innerDocsType |> docsTypeToSyntax |> Elm.Syntax.Node.empty
 
 
-indentAfterFirstLine : String -> String
-indentAfterFirstLine =
-    \string ->
-        case string |> String.split "\n" of
-            [] ->
-                string
-
-            line0 :: line1Up ->
-                line0
-                    :: (line1Up |> List.map (\line -> "    " ++ line))
-                    |> String.join "\n"
+docsAliasToSyntax : Elm.Docs.Alias -> Elm.Syntax.TypeAlias.TypeAlias
+docsAliasToSyntax =
+    \docsAlias ->
+        { documentation = Nothing
+        , name = docsAlias.name |> Elm.Syntax.Node.empty
+        , generics = docsAlias.args |> List.map Elm.Syntax.Node.empty
+        , typeAnnotation = docsAlias.tipe |> docsTypeToSyntaxNode
+        }
 
 
-indent : String -> String
-indent =
-    \string ->
-        string
-            |> String.split "\n"
-            |> List.map (\line -> "    " ++ line)
-            |> String.join "\n"
+valueToString : Elm.Docs.Value -> String
+valueToString =
+    \docsValue ->
+        { name = docsValue.name |> Elm.Syntax.Node.empty
+        , typeAnnotation = docsValue.tipe |> docsTypeToSyntaxNode
+        }
+            |> Elm.Pretty.prettySignature
+            |> Pretty.pretty 60
+
+
+docsUnionToSyntax : Elm.Docs.Union -> Elm.Syntax.Type.Type
+docsUnionToSyntax =
+    \docsUnion ->
+        { documentation = Nothing
+        , name = docsUnion.name |> Elm.Syntax.Node.empty
+        , generics = docsUnion.args |> List.map Elm.Syntax.Node.empty
+        , constructors =
+            docsUnion.tags
+                |> List.map
+                    (\( variantName, variantAttachments ) ->
+                        { name = variantName |> Elm.Syntax.Node.empty
+                        , arguments = variantAttachments |> List.map docsTypeToSyntaxNode
+                        }
+                            |> Elm.Syntax.Node.empty
+                    )
+        }
 
 
 moduleChangesToChangeLogChunk : ( String, Elm.Module.Diff.Diff ) -> String
@@ -729,6 +695,93 @@ moduleChangesToChangeLogChunk ( moduleName, moduleChanges ) =
         |> indent
     ]
         |> String.concat
+
+
+toElmCodeBlockMarkdown : String -> String
+toElmCodeBlockMarkdown =
+    \code ->
+        [ "\n```elm\n"
+        , code
+        , "\n```"
+        ]
+            |> String.concat
+
+
+indentAfterFirstLine : String -> String
+indentAfterFirstLine =
+    \string ->
+        case string |> String.split "\n" of
+            [] ->
+                string
+
+            line0 :: line1Up ->
+                line0
+                    :: (line1Up |> List.map (\line -> "    " ++ line))
+                    |> String.join "\n"
+
+
+indent : String -> String
+indent =
+    \string ->
+        string
+            |> String.split "\n"
+            |> List.map (\line -> "    " ++ line)
+            |> String.join "\n"
+
+
+elmCodeUi : ElmSyntaxHighlight.SyntaxHighlightable -> Element event_
+elmCodeUi syntaxHighlightable =
+    Html.code
+        [ Html.Attributes.style "font-size" "0.8em"
+        , Html.Attributes.style "line-height" "1.5"
+        ]
+        [ Html.code []
+            (syntaxHighlightable
+                |> List.map
+                    (\segment ->
+                        Html.code
+                            (case segment.syntaxKind of
+                                Nothing ->
+                                    []
+
+                                Just syntaxKind ->
+                                    [ Html.Attributes.style "color"
+                                        (syntaxKind |> syntaxKindToColor |> Color.toCssString)
+                                    ]
+                            )
+                            [ Html.text segment.string
+                            ]
+                    )
+            )
+        ]
+        |> Element.html
+
+
+syntaxKindToColor : ElmSyntaxHighlight.SyntaxKind -> Color.Color
+syntaxKindToColor =
+    -- light purple Color.rgb 0.97 0.42 1
+    \syntaxKind ->
+        case syntaxKind of
+            ElmSyntaxHighlight.Type ->
+                Color.rgb 0.9 0.55 1
+
+            ElmSyntaxHighlight.Variant ->
+                Color.rgb 0.24 0.75 0.62
+
+            ElmSyntaxHighlight.Field ->
+                Color.rgb 0.4 0.9 0
+
+            ElmSyntaxHighlight.ModuleNameOrAlias ->
+                Color.rgb 0.45 0.5 1
+
+            ElmSyntaxHighlight.Variable ->
+                Color.rgb 0.85 0.8 0.1
+
+            ElmSyntaxHighlight.Flow ->
+                Color.rgb 1 0.45 0.35
+
+            ElmSyntaxHighlight.DeclarationRelated ->
+                Color.rgb 0.55 0.75 1
 
 
 packageChangesHighlightedUi : Elm.Docs.Diff.Diff -> Element event_
@@ -956,69 +1009,11 @@ unionToSyntaxHighlightable union =
                 |> ElmSyntaxHighlight.for
 
 
-docsTypeToSyntaxNode : Elm.Type.Type -> Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation
-docsTypeToSyntaxNode =
-    \innerDocsType ->
-        innerDocsType |> docsTypeToSyntax |> Elm.Syntax.Node.empty
-
-
-docsUnionToSyntax : Elm.Docs.Union -> Elm.Syntax.Type.Type
-docsUnionToSyntax =
-    \docsUnion ->
-        { documentation = Nothing
-        , name = docsUnion.name |> Elm.Syntax.Node.empty
-        , generics = docsUnion.args |> List.map Elm.Syntax.Node.empty
-        , constructors =
-            docsUnion.tags
-                |> List.map
-                    (\( variantName, variantAttachments ) ->
-                        { name = variantName |> Elm.Syntax.Node.empty
-                        , arguments = variantAttachments |> List.map docsTypeToSyntaxNode
-                        }
-                            |> Elm.Syntax.Node.empty
-                    )
-        }
-
-
-aliasToString : Elm.Docs.Alias -> String
-aliasToString =
-    \docsAlias ->
-        docsAlias
-            |> docsAliasToSyntax
-            |> Elm.Pretty.prettyTypeAlias
-            |> Pretty.pretty 60
-
-
-docsAliasToSyntax : Elm.Docs.Alias -> Elm.Syntax.TypeAlias.TypeAlias
-docsAliasToSyntax =
-    \docsAlias ->
-        { documentation = Nothing
-        , name = docsAlias.name |> Elm.Syntax.Node.empty
-        , generics = docsAlias.args |> List.map Elm.Syntax.Node.empty
-        , typeAnnotation = docsAlias.tipe |> docsTypeToSyntaxNode
-        }
-
-
-valueToString : Elm.Docs.Value -> String
-valueToString =
-    \docsValue ->
-        { name = docsValue.name |> Elm.Syntax.Node.empty
-        , typeAnnotation = docsValue.tipe |> docsTypeToSyntaxNode
-        }
-            |> Elm.Pretty.prettySignature
-            |> Pretty.pretty 60
-
-
 header : String -> Element event_
 header text =
     text
         |> Element.text
         |> Element.el [ Element.Font.bold, Element.Font.size 24 ]
-
-
-interactiveColor : Element.Color
-interactiveColor =
-    Element.rgb 0.3 0.56 0.9
 
 
 actionUi : String -> Element ()
@@ -1160,6 +1155,11 @@ dropFilesJsonDecoder =
         (Json.Decode.oneOrMore (\head _ -> head)
             File.decoder
         )
+
+
+type DiffViewKind
+    = DiffViewKindHighlighted
+    | DiffViewKindChangeLog
 
 
 type VersionedFullPackageName
