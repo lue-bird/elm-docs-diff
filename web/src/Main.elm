@@ -689,9 +689,7 @@ moduleChangesToChangeLogChunk ( moduleName, moduleChanges ) =
             (moduleChanges.aliases.added |> Dict.keys |> List.map (\aliasName -> "type alias " ++ (aliasName |> toInlineCodeMarkdown)))
             (moduleChanges.values.added |> Dict.keys |> List.map toInlineCodeMarkdown)
       , changesToDoc "changed"
-            (moduleChanges.unions.changed
-                |> changedToItems unionToString
-            )
+            (moduleChanges.unions.changed |> changedToItems unionToString)
             (moduleChanges.aliases.changed
                 |> changedToItems (\alias -> alias |> aliasToString |> toElmCodeBlockMarkdown)
             )
@@ -797,16 +795,15 @@ packageChangesHighlightedUi : Elm.Docs.Diff.Diff -> Element event_
 packageChangesHighlightedUi =
     \diff ->
         let
-            removedChunk : List (Chunk (Element Never))
+            removedChunk : List { title : String, magnitude : Elm.SemanticMagnitude.Magnitude, details : Element Never }
             removedChunk =
                 if diff.modulesRemoved |> Set.isEmpty then
                     []
 
                 else
-                    [ Chunk
-                        { title = "removed modules"
-                        , magnitude = Elm.SemanticMagnitude.Major
-                        , details =
+                    [ { title = "removed modules"
+                      , magnitude = Elm.SemanticMagnitude.Major
+                      , details =
                             diff.modulesRemoved
                                 |> Set.toList
                                 |> List.map
@@ -815,19 +812,18 @@ packageChangesHighlightedUi =
                                             |> elmCodeUi
                                     )
                                 |> Element.column [ Element.spacing 0 ]
-                        }
+                      }
                     ]
 
-            addedChunk : List (Chunk (Element Never))
+            addedChunk : List { title : String, magnitude : Elm.SemanticMagnitude.Magnitude, details : Element Never }
             addedChunk =
                 if diff.modulesAdded |> Set.isEmpty then
                     []
 
                 else
-                    [ Chunk
-                        { title = "added modules"
-                        , magnitude = Elm.SemanticMagnitude.Minor
-                        , details =
+                    [ { title = "added modules"
+                      , magnitude = Elm.SemanticMagnitude.Minor
+                      , details =
                             diff.modulesAdded
                                 |> Set.toList
                                 |> List.map
@@ -836,7 +832,7 @@ packageChangesHighlightedUi =
                                             |> elmCodeUi
                                     )
                                 |> Element.column [ Element.spacing 0 ]
-                        }
+                      }
                     ]
         in
         [ removedChunk
@@ -844,34 +840,35 @@ packageChangesHighlightedUi =
         , diff.modulesChanged |> Dict.toList |> List.map moduleChangesToChunk
         ]
             |> List.concat
-            |> List.map (\chunk -> chunk |> chunkToDoc)
+            |> List.map chunkUi
             |> Element.column
                 [ Element.spacing 40
                 , Element.height Element.fill
                 ]
 
 
-chunkToDoc : Chunk (Element Never) -> Element event_
-chunkToDoc (Chunk chunk) =
-    [ [ (chunk.title ++ " ") |> Element.text
-      , chunk.magnitude |> magnitudeUi
-      ]
-        |> Element.paragraph [ Element.Font.size 23, Element.Font.bold ]
-    , chunk.details
-        |> Element.map Basics.never
-        |> Element.el [ Element.paddingXY 20 30 ]
-    ]
-        |> Element.column []
+chunkUi : { title : String, magnitude : Elm.SemanticMagnitude.Magnitude, details : Element Never } -> Element event_
+chunkUi =
+    \chunk ->
+        [ [ (chunk.title ++ " ") |> Element.text
+          , chunk.magnitude |> magnitudeUi
+          ]
+            |> Element.paragraph [ Element.Font.size 23, Element.Font.bold ]
+        , chunk.details
+            |> Element.map Basics.never
+            |> Element.el [ Element.paddingXY 20 30 ]
+        ]
+            |> Element.column []
 
 
-moduleChangesToChunk : ( String, Elm.Module.Diff.Diff ) -> Chunk (Element Never)
+moduleChangesToChunk : ( String, Elm.Module.Diff.Diff ) -> { title : String, magnitude : Elm.SemanticMagnitude.Magnitude, details : Element Never }
 moduleChangesToChunk ( moduleName, moduleChanges ) =
     let
         magnitude : Elm.SemanticMagnitude.Magnitude
         magnitude =
             moduleChanges |> Elm.Module.Diff.toMagnitude
 
-        changesToDocTriple :
+        changesUiTriple :
             (v -> ElmSyntaxHighlight.SyntaxHighlightable)
             ->
                 { added : Dict String v
@@ -879,7 +876,7 @@ moduleChangesToChunk ( moduleName, moduleChanges ) =
                 , removed : Dict String v
                 }
             -> ( List (Element Never), List (Element Never), List (Element Never) )
-        changesToDocTriple entryToDoc changes =
+        changesUiTriple entryUi changes =
             let
                 diffed : { old : v, new : v } -> Element Never
                 diffed value =
@@ -894,7 +891,7 @@ moduleChangesToChunk ( moduleName, moduleChanges ) =
                                 , Element.Font.size 27
                                 , Element.Font.family [ Element.Font.monospace ]
                                 ]
-                      , entryToDoc value.old |> elmCodeUi
+                      , entryUi value.old |> elmCodeUi
                       ]
                         |> Element.row [ Element.spacing 10 ]
                     , [ "+"
@@ -906,7 +903,7 @@ moduleChangesToChunk ( moduleName, moduleChanges ) =
                                 , Element.Font.size 23
                                 , Element.Font.family [ Element.Font.monospace ]
                                 ]
-                      , entryToDoc value.new |> elmCodeUi
+                      , entryUi value.new |> elmCodeUi
                       ]
                         |> Element.row [ Element.spacing 10 ]
                     ]
@@ -914,81 +911,80 @@ moduleChangesToChunk ( moduleName, moduleChanges ) =
             in
             ( changes.added
                 |> Dict.toList
-                |> List.map (\( _, value ) -> entryToDoc value |> elmCodeUi)
+                |> List.map (\( _, value ) -> entryUi value |> elmCodeUi)
             , changes.changed |> Dict.toList |> List.map (\( _, value ) -> diffed value)
             , changes.removed
                 |> Dict.toList
-                |> List.map (\( _, value ) -> entryToDoc value |> elmCodeUi)
+                |> List.map (\( _, value ) -> entryUi value |> elmCodeUi)
             )
 
         ( unionAdd, unionChange, unionRemove ) =
             moduleChanges.unions
-                |> changesToDocTriple (\docsUnion -> docsUnion |> unionToSyntaxHighlightable)
+                |> changesUiTriple (\docsUnion -> docsUnion |> unionToSyntaxHighlightable)
 
         ( aliasAdd, aliasChange, aliasRemove ) =
             moduleChanges.aliases
-                |> changesToDocTriple (\docsAlias -> docsAlias |> aliasToString |> ElmSyntaxHighlight.for)
+                |> changesUiTriple (\docsAlias -> docsAlias |> aliasToString |> ElmSyntaxHighlight.for)
 
         ( valueAdd, valueChange, valueRemove ) =
             moduleChanges.values
-                |> changesToDocTriple (\docsValue -> docsValue |> valueToString |> ElmSyntaxHighlight.for)
+                |> changesUiTriple (\docsValue -> docsValue |> valueToString |> ElmSyntaxHighlight.for)
     in
-    Chunk
-        { title = moduleName
-        , magnitude = magnitude
-        , details =
-            let
-                changesToDoc : ( String, Element.Color ) -> List (Element Never) -> List (Element Never) -> List (Element Never) -> Maybe (Element Never)
-                changesToDoc ( categoryName, categoryColor ) unions aliases values =
-                    case ( unions, aliases, values ) of
-                        ( [], [], [] ) ->
-                            Nothing
+    { title = moduleName
+    , magnitude = magnitude
+    , details =
+        let
+            changesUi : ( String, Element.Color ) -> List (Element Never) -> List (Element Never) -> List (Element Never) -> Maybe (Element Never)
+            changesUi ( categoryName, categoryColor ) unions aliases values =
+                case ( unions, aliases, values ) of
+                    ( [], [], [] ) ->
+                        Nothing
 
-                        ( unionsPossiblyFilled, aliasesPossiblyFilled, valuesPossiblyFilled ) ->
-                            Just
-                                ([ categoryName
-                                    |> Element.text
-                                    |> Element.el
-                                        [ Element.Font.size 24
-                                        , Element.Font.bold
-                                        , Element.Font.color categoryColor
-                                        ]
-                                 , [ case unionsPossiblyFilled of
-                                        [] ->
-                                            Element.none
+                    ( unionsPossiblyFilled, aliasesPossiblyFilled, valuesPossiblyFilled ) ->
+                        Just
+                            ([ categoryName
+                                |> Element.text
+                                |> Element.el
+                                    [ Element.Font.size 24
+                                    , Element.Font.bold
+                                    , Element.Font.color categoryColor
+                                    ]
+                             , [ case unionsPossiblyFilled of
+                                    [] ->
+                                        Element.none
 
-                                        union0 :: union1Up ->
-                                            (union0 :: union1Up) |> Element.column [ Element.spacing 25 ]
-                                   , case aliasesPossiblyFilled of
-                                        [] ->
-                                            Element.none
+                                    union0 :: union1Up ->
+                                        (union0 :: union1Up) |> Element.column [ Element.spacing 25 ]
+                               , case aliasesPossiblyFilled of
+                                    [] ->
+                                        Element.none
 
-                                        alias0 :: alias1Up ->
-                                            (alias0 :: alias1Up)
-                                                |> List.map (\el -> el |> Element.el [ Element.paddingEach { left = 0, right = 0, top = 0, bottom = 0 } ])
-                                                |> Element.column [ Element.spacing 14 ]
-                                   , case valuesPossiblyFilled of
-                                        [] ->
-                                            Element.none
+                                    alias0 :: alias1Up ->
+                                        (alias0 :: alias1Up)
+                                            |> List.map (\el -> el |> Element.el [ Element.paddingEach { left = 0, right = 0, top = 0, bottom = 0 } ])
+                                            |> Element.column [ Element.spacing 14 ]
+                               , case valuesPossiblyFilled of
+                                    [] ->
+                                        Element.none
 
-                                        value0 :: value1Up ->
-                                            (value0 :: value1Up) |> Element.column [ Element.spacing 25 ]
-                                   ]
-                                    |> Element.column
-                                        [ Element.spacing 33
-                                        , Element.paddingEach { left = 40, right = 5, top = 20, bottom = 40 }
-                                        ]
-                                 ]
-                                    |> Element.column [ Element.spacing 0 ]
-                                )
-            in
-            [ changesToDoc ( "removed", removedColor ) unionRemove aliasRemove valueRemove
-            , changesToDoc ( "changed", changedColor ) unionChange aliasChange valueChange
-            , changesToDoc ( "added", addedColor ) unionAdd aliasAdd valueAdd
-            ]
-                |> List.filterMap identity
-                |> Element.column [ Element.spacing 10 ]
-        }
+                                    value0 :: value1Up ->
+                                        (value0 :: value1Up) |> Element.column [ Element.spacing 25 ]
+                               ]
+                                |> Element.column
+                                    [ Element.spacing 33
+                                    , Element.paddingEach { left = 40, right = 5, top = 20, bottom = 40 }
+                                    ]
+                             ]
+                                |> Element.column [ Element.spacing 0 ]
+                            )
+        in
+        [ changesUi ( "removed", removedColor ) unionRemove aliasRemove valueRemove
+        , changesUi ( "changed", changedColor ) unionChange aliasChange valueChange
+        , changesUi ( "added", addedColor ) unionAdd aliasAdd valueAdd
+        ]
+            |> List.filterMap identity
+            |> Element.column [ Element.spacing 10 ]
+    }
 
 
 changedColor : Element.Color
@@ -1190,14 +1186,6 @@ type VersionedFullPackageName
 
 type SemanticVersion
     = SemanticVersion { major : Int, minor : Int, patch : Int }
-
-
-type Chunk details
-    = Chunk
-        { title : String
-        , magnitude : Elm.SemanticMagnitude.Magnitude
-        , details : details
-        }
 
 
 docsTypeToSyntax : Elm.Type.Type -> Elm.Syntax.TypeAnnotation.TypeAnnotation
