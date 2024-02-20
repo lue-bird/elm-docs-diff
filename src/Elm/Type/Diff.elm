@@ -6,7 +6,7 @@ module Elm.Type.Diff exposing (areEquivalent, variable)
 
 -}
 
-import Dict
+import Dict exposing (Dict)
 import Elm.SemanticMagnitude
 import Elm.Type
 import Set
@@ -199,11 +199,11 @@ for =
                                 Nothing
 
                             ( Nothing, Nothing ) ->
-                                fieldsDiff { old = oldFields, new = newFields }
+                                { old = oldFields, new = newFields } |> fieldsDiff
 
                             ( Just oldExt, Just newExt ) ->
                                 Maybe.map (\fieldDiffs -> ( oldExt, newExt ) :: fieldDiffs)
-                                    (fieldsDiff { old = oldFields, new = newFields })
+                                    ({ old = oldFields, new = newFields } |> fieldsDiff)
 
                     _ ->
                         Nothing
@@ -343,18 +343,33 @@ fieldsDiff rawFields =
 
     else
         let
-            newFields : List ( String, Elm.Type.Type )
+            newFields : Dict String Elm.Type.Type
             newFields =
-                List.sortBy Tuple.first rawFields.new
+                rawFields.new |> Dict.fromList
 
-            oldFields : List ( String, Elm.Type.Type )
+            oldFields : Dict String Elm.Type.Type
             oldFields =
-                List.sortBy Tuple.first rawFields.old
+                rawFields.old |> Dict.fromList
         in
-        if List.map2 Tuple.pair oldFields newFields |> List.any (\( ( a, _ ), ( b, _ ) ) -> a == b) then
-            Nothing
+        Dict.merge
+            -- field was removed
+            (\_ _ _ -> Nothing)
+            -- field was changed
+            (\_ old new soFar ->
+                case soFar of
+                    Nothing ->
+                        Nothing
 
-        else
-            List.map2 Tuple.pair oldFields newFields
-                |> listAllJustMap (\( ( _, a ), ( _, b ) ) -> for ( a, b ))
-                |> Maybe.map List.concat
+                    Just soFarRenames ->
+                        case ( old, new ) |> for of
+                            Nothing ->
+                                Nothing
+
+                            Just newRenames ->
+                                newRenames ++ soFarRenames |> Just
+            )
+            -- field was added
+            (\_ _ _ -> Nothing)
+            oldFields
+            newFields
+            ([] |> Just)
