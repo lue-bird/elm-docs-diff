@@ -20,15 +20,12 @@
             "mdgriffith/elm-ui": "1.1.8",
             "stil4m/elm-syntax": "7.3.2",
             "the-sett/elm-pretty-printer": "3.1.0",
-            "the-sett/elm-syntax-dsl": "6.0.2",
-            "timjs/elm-collage": "3.0.0",
-            "zwilias/elm-rosetree": "1.5.0"
+            "the-sett/elm-syntax-dsl": "6.0.2"
         },
         "indirect": {
             "Chadtech/elm-bool-extra": "2.4.2",
             "elm/bytes": "1.0.8",
             "elm/parser": "1.1.0",
-            "elm/svg": "1.0.1",
             "elm/time": "1.0.0",
             "elm/url": "1.0.0",
             "elm/virtual-dom": "1.0.3",
