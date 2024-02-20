@@ -3,7 +3,7 @@
     "name": "lue-bird/elm-docs-diff",
     "summary": " compare versions of an elm API",
     "license": "MIT",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "exposed-modules": [
         "Elm.Docs.Diff",
         "Elm.Module.Diff",
