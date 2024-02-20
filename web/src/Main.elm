@@ -115,6 +115,14 @@ subscriptions =
         Sub.none
 
 
+docsJsonDecoder : Json.Decode.Decoder (List Elm.Docs.Module)
+docsJsonDecoder =
+    Json.Decode.oneOf
+        [ Json.Decode.map List.singleton Elm.Docs.decoder
+        , Json.Decode.list Elm.Docs.decoder
+        ]
+
+
 reactTo : Event -> (State -> ( State, Cmd Event ))
 reactTo event =
     case event of
@@ -216,14 +224,6 @@ reactTo event =
                 ( { state | diffViewKind = newDiffViewKind } |> State
                 , Cmd.none
                 )
-
-
-docsJsonDecoder : Json.Decode.Decoder (List Elm.Docs.Module)
-docsJsonDecoder =
-    Json.Decode.oneOf
-        [ Json.Decode.map List.singleton Elm.Docs.decoder
-        , Json.Decode.list Elm.Docs.decoder
-        ]
 
 
 earlierOrLaterFieldAlter :
