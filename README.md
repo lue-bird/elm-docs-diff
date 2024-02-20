@@ -12,4 +12,4 @@ The idea is for this to be a more general `elm diff` to show changes between for
   - versions of private packages
 
 ## thanks
-  - rlefevre for [elm.dmy.fr](https://github.com/dmy/elm.dmy.fr) which the website uses as a proxy because it allows fetching package `docs.json`
+  - rlefevre for [elm.dmy.fr](https://github.com/dmy/elm.dmy.fr) which the diff website uses as a proxy because it allows fetching package `docs.json`
