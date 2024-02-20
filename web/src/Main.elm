@@ -163,7 +163,7 @@ reactTo event =
                                         { earlierOrLater = docsJsonSource.earlierOrLater
                                         , event =
                                             fileString
-                                                |> Json.Decode.decodeString (Json.Decode.list Elm.Docs.decoder)
+                                                |> Json.Decode.decodeString docsJsonDecoder
                                                 |> Result.mapError (\error -> error |> Json.Decode.errorToString |> Http.BadBody)
                                                 |> DocsReceived
                                         }
@@ -218,6 +218,14 @@ reactTo event =
                 )
 
 
+docsJsonDecoder : Json.Decode.Decoder (List Elm.Docs.Module)
+docsJsonDecoder =
+    Json.Decode.oneOf
+        [ Json.Decode.map List.singleton Elm.Docs.decoder
+        , Json.Decode.list Elm.Docs.decoder
+        ]
+
+
 earlierOrLaterFieldAlter :
     EarlierOrLater
     -> (field -> field)
@@ -248,7 +256,7 @@ fetchPackageDocs =
                 , "/docs.json"
                 ]
                     |> String.concat
-            , expect = Http.expectJson identity (Json.Decode.list Elm.Docs.decoder)
+            , expect = Http.expectJson identity docsJsonDecoder
             }
 
 
