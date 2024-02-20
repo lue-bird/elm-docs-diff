@@ -702,7 +702,7 @@ moduleChangesToChangeLogChunk ( moduleName, moduleChanges ) =
                             |> Pretty.pretty 60
                             |> toElmCodeBlockMarkdown
     in
-    [ "  - in "
+    [ "  - in module "
     , moduleName |> toInlineCodeMarkdown
     , "\n"
     , [ changesToDoc "removed"
