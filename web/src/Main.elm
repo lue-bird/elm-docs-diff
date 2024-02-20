@@ -393,6 +393,7 @@ ui =
                             [ Element.spacing 80
                             , Element.paddingEach { top = 50, left = 80, right = 40, bottom = 20 }
                             , Element.height Element.fill
+                            , Element.centerX
                             ]
             )
                 |> Element.layout
@@ -510,7 +511,7 @@ toInlineCodeMarkdown =
 packageChangesChangeLogUi : Elm.Docs.Diff.Diff -> Element event_
 packageChangesChangeLogUi =
     \diff ->
-        [ [ "🗒  " |> Element.text
+        [ [ "⿻ " |> Element.text -- 🗒
           , "Ctrl+A then Ctrl+C to yoink"
                 |> Element.text
                 |> Element.el
@@ -1027,8 +1028,8 @@ header text =
 actionUi : String -> Element ()
 actionUi label =
     Element.Input.button
-        [ Element.Font.color interactiveColor
-        , Element.Background.color (Element.rgb 0 0 0)
+        [ Element.Background.color (Element.rgba 0 0 0 0)
+        , Element.Font.color interactiveColor
         ]
         { label = label |> Element.text
         , onPress = () |> Just
@@ -1046,16 +1047,10 @@ docsJsonSourceUi =
                 [ [ [ [ "package" |> Element.text
                       , [ textInputUi { state = state.packageAuthor, label = "author" }
                             |> Element.map PackageAuthorChanged
-                            |> Element.el
-                                [ Element.width (Element.shrink |> Element.minimum 80)
-                                ]
                         , textInputUi { state = state.packageName, label = "name" }
                             |> Element.map PackageNameChanged
-                            |> Element.el
-                                [ Element.width (Element.shrink |> Element.minimum 80)
-                                ]
                         ]
-                            |> Element.row []
+                            |> Element.row [ Element.spacing 7 ]
                       ]
                         |> Element.column []
                     , [ "version" |> Element.text
@@ -1066,12 +1061,12 @@ docsJsonSourceUi =
                         , textInputUi { state = state.versionPatch, label = "patch" }
                             |> Element.map VersionPatchChanged
                         ]
-                            |> Element.row []
+                            |> Element.row [ Element.spacing 7 ]
                       ]
                         |> Element.column []
                     ]
                         |> Element.row
-                            [ Element.spacing 30
+                            [ Element.spacing 35
                             ]
                         |> Element.map PackageDocsJsonSourceEvent
                   , case { major = state.versionMajor, minor = state.versionMinor, patch = state.versionPatch } |> semanticVersionFromStrings of
@@ -1092,7 +1087,7 @@ docsJsonSourceUi =
                                     )
                   ]
                     |> Element.column
-                        [ Element.spacing 15
+                        [ Element.spacing 25
                         ]
                 , [ "or" |> Element.text
                   , filesSelectUi |> Element.map FilesSelectEvent
@@ -1106,30 +1101,49 @@ docsJsonSourceUi =
 
 textInputUi : { state : String, label : String } -> Element String
 textInputUi config =
-    Element.Input.text
-        [ Element.Border.color (Element.rgba 0 0 0 0)
-        , Element.paddingXY 0 4
-        , Element.Font.size 20
-        , Element.Font.family [ Element.Font.monospace ]
-        , Element.Font.color interactiveColor
-        , Element.Border.rounded 0
-        , Element.Background.color (Element.rgb 0 0 0)
+    -- wrapped in a row as a trick to make the width scale with the input
+    -- thanks: https://github.com/bburdette/elm-ui-examples/blob/master/textinput-sized-to-contents/src/Main.elm
+    [ config.label
+        |> Element.text
+        |> Element.el
+            [ Element.Font.size 14
+            , Element.Font.family [ Element.Font.sansSerif ]
+            ]
+    , Element.row
+        [ Element.inFront
+            (Element.Input.text
+                [ Element.width Element.fill
+                , Element.Border.color (Element.rgba 0 0 0 0)
+                , Element.paddingXY 0 4
+                , Element.Font.color interactiveColor
+                , Element.Border.rounded 0
+                , Element.Background.color (Element.rgb 0 0 0)
+                ]
+                { onChange = identity
+                , text = config.state
+                , placeholder = Nothing
+                , label =
+                    Element.Input.labelHidden config.label
+                }
+            )
+        , Element.paddingXY 10 0
         ]
-        { onChange = identity
-        , text = config.state
-        , placeholder = Nothing
-        , label =
-            Element.Input.labelAbove
-                []
-                (config.label
-                    |> Element.text
-                    |> Element.el
-                        [ Element.Font.size 14
-                        , Element.Font.family [ Element.Font.sansSerif ]
-                        ]
-                )
-        }
-        |> Element.el [ Element.paddingEach { top = 0, left = 0, right = 10, bottom = 0 } ]
+        [ config.state
+            |> Element.text
+            |> Element.el
+                [ Element.Font.color (Element.rgba 0 0 0 0)
+                , Html.Attributes.style "user-select" "none" |> Element.htmlAttribute
+                ]
+        ]
+        |> Element.el
+            [ Element.Font.size 20
+            , Element.Font.family [ Element.Font.monospace ]
+            ]
+    ]
+        |> Element.column
+            [ Element.spacing 5
+            , Element.alignLeft
+            ]
 
 
 semanticVersionFromStrings : { major : String, minor : String, patch : String } -> Result String SemanticVersion
