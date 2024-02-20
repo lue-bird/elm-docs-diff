@@ -1,16 +1,8 @@
-module Elm.Type.Diff exposing
-    ( areEquivalent
-    , Constraint(..), VariableCategory(..), variable, variableCategory
-    )
+module Elm.Type.Diff exposing (areEquivalent, variable)
 
 {-| Diff an [`Elm.Type.Type`](https://dark.elm.dmy.fr/packages/elm/project-metadata-utils/latest/Elm-Type#Type)
 
-@docs areEquivalent
-
-
-## variables
-
-@docs Constraint, VariableCategory, variable, variableCategory
+@docs areEquivalent, variable
 
 -}
 
@@ -20,7 +12,7 @@ import Elm.Type
 import Set
 
 
-{-| A normal type variable like `element` or one with a [`Constraint`](#Constraint) like `number`
+{-| A normal type variable like `element` or one with a `Constraint` like `number`
 -}
 type VariableCategory
     = VariableConstrained Constraint
@@ -40,26 +32,6 @@ type Constraint
     | Comparable
     | Appendable
     | Number
-
-
-{-| Its [`VariableCategory`](#VariableCategory)
--}
-variableCategory : String -> VariableCategory
-variableCategory name =
-    if String.startsWith "compappend" name then
-        CompAppend |> VariableConstrained
-
-    else if String.startsWith "comparable" name then
-        Comparable |> VariableConstrained
-
-    else if String.startsWith "appendable" name then
-        Appendable |> VariableConstrained
-
-    else if String.startsWith "number" name then
-        Number |> VariableConstrained
-
-    else
-        VariableUnconstrained
 
 
 {-| Reminder: Emulates `elm diff` behaviour and therefore explicitly emulates its errors:
@@ -134,6 +106,26 @@ variable ( old, new ) =
 
         ( VariableUnconstrained, VariableConstrained _ ) ->
             Elm.SemanticMagnitude.Major
+
+
+{-| Its `VariableCategory`
+-}
+variableCategory : String -> VariableCategory
+variableCategory name =
+    if String.startsWith "compappend" name then
+        CompAppend |> VariableConstrained
+
+    else if String.startsWith "comparable" name then
+        Comparable |> VariableConstrained
+
+    else if String.startsWith "appendable" name then
+        Appendable |> VariableConstrained
+
+    else if String.startsWith "number" name then
+        Number |> VariableConstrained
+
+    else
+        VariableUnconstrained
 
 
 
